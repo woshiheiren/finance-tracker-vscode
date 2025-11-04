@@ -130,3 +130,8 @@ Your web browser will automatically open, and your **Vibe Coder Finance Tracker*
 * **Monopoly-Core** (The "PDF Reader")
 * **Altair** (The "Chart Maker")
 * **OpenPyXL / XlsxWriter** (The "Excel Writers")
+
+##  acknowledgements
+This app wouldn't be possible without the incredible open-source `monopoly-core` library by Benjamin Awad.
+
+A full copy of the project's MIT License is available in the `THIRD-PARTY-LICENSES.md` file.
