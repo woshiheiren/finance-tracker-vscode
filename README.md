@@ -1,5 +1,7 @@
 # 💰 Vibe Coder's AI Finance Tracker 💰
 
+**Looking for the Windows guide? [Click here!](README-Windows.md)**
+
 Welcome! This is a "vibe-coded" application that turns your boring PDF bank statements into a powerful, interactive financial dashboard. It uses AI to automatically categorize your spending, lets you edit everything, and saves it all to a master spreadsheet.
 
 This guide will take you from a **blank Mac computer** to a **fully running app**. No coding knowledge needed!
