@@ -5,6 +5,7 @@
 
 # 2. Privacy: Never upload our personal finance data!
 master_spreadsheet.xlsx
+test_statements/
 *.xlsx
 
 # 3. Cleanliness: Ignore our "Project Box" (it's huge)

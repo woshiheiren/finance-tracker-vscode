@@ -44,6 +44,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # --- END OF CUSTOM CSS ---
 
+def format_time(seconds):
+    """Converts seconds into a H:M:S or M:S string."""
+    seconds = int(seconds)
+    if seconds > 3600:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        seconds = seconds % 60
+        return f"{hours}h {minutes}m {seconds}s"
+    elif seconds > 60:
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return f"{minutes}m {seconds}s"
+    else:
+        return f"{seconds}s"
+
 
 # --- AI CONFIGURATION ---
 # Configure the Gemini AI client using our secret key
@@ -169,13 +184,21 @@ def save_to_master_file(data_to_save):
             # This is a brand new tab
             existing_data[tab_name] = new_pivot
 
-    # 10. Write *everything* back to the Excel file
     with pd.ExcelWriter(MASTER_FILE, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
         for sheet_name, sheet_data in existing_data.items():
             # Ensure the index (date) is formatted nicely
             if isinstance(sheet_data.index, pd.DatetimeIndex):
                 sheet_data.index = sheet_data.index.date
             sheet_data.to_excel(writer, sheet_name=sheet_name)
+            worksheet = writer.sheets[sheet_name]
+    
+            # Set Column A (the "Date" column) to a width of 12
+            worksheet.set_column(0, 0, 12)
+            
+            # Set Column B to the end to a width of 15 (for Accounting)
+            worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format)
     
     return True # Success
 
@@ -194,6 +217,16 @@ if 'processed_data' not in st.session_state:
 
 if 'categories' not in st.session_state:
     st.session_state.categories = []
+
+if 'all_processed_data' not in st.session_state:
+    st.session_state.all_processed_data = [] # Stores *completed* file data
+
+if 'file_progress_index' not in st.session_state:
+    st.session_state.file_progress_index = 0 # Bookmark for *which file*
+
+if 'row_progress_index' not in st.session_state:
+    st.session_state.row_progress_index = 0 # Bookmark for *which row*
+
 
 # --- SIDEBAR ---
 st.sidebar.title("App Settings")
@@ -232,85 +265,136 @@ with tab1:
         if col1.button("✅ Yes, use AI", type="primary"):
             st.session_state.app_step = "3_process_with_ai"
             st.session_state.stop_ai = False # Ensure brake is off
+            
+            # --- RESET BOOKMARKS FOR NEW JOB ---
+            st.session_state.all_processed_data = [] 
+            st.session_state.file_progress_index = 0
+            st.session_state.row_progress_index = 0
+            # --- END RESET ---
+            
             st.rerun()
 
         if col2.button("Skip (I'll categorize manually)"):
             st.session_state.app_step = "3_process_no_ai"
             st.rerun()
 
-    # --- STEP 3A: PROCESS *WITH* AI ---
+    # --- STEP 3A: PROCESS *WITH* AI (FIXED STATE LOGIC) ---
     if st.session_state.app_step == "3_process_with_ai":
+        
+        eta_placeholder = st.empty()
+        row_timer_placeholder = st.empty()
+        progress_bar = st.progress(0, text="Starting AI process...")
+        
+        if st.button("Stop AI ⏹️"):
+            st.session_state.stop_ai = True
+            st.warning("Stopping AI... Will process remaining files without categorization.")
+            time.sleep(1) 
+            st.rerun() 
+
         try:
-            # --- This block now only runs ONCE ---
-            if st.session_state.processed_data is None:
-                with st.spinner("Processing files..."):
-                    data = process_files_to_dataframe(uploaded_files)
+            total_files = len(uploaded_files)
+            
+            # Get our "file" bookmark
+            file_bookmark = st.session_state.file_progress_index
+            
+            # --- OUTER (File-by-File) Loop ---
+            for i, file in enumerate(uploaded_files[file_bookmark:]):
                 
-                if data is not None:
-                    st.success("Files processed! Now analyzing with AI...")
-                    columns_to_keep = ['date', 'description', 'amount']
-                    preview_data = data[columns_to_keep].copy()
-                    preview_data['Category'] = "" # Start with blank
-                    st.session_state.processed_data = preview_data
+                current_file_index = i + file_bookmark
+                
+                # --- 1. GET THE *CORRECT* FILE DATA FIRST ---
+                if st.session_state.row_progress_index == 0: 
+                    with st.spinner(f"Processing `{file.name}` ({current_file_index+1}/{total_files})..."):
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            temp_dir_path = Path(temp_dir)
+                            input_pdf_path = temp_dir_path / file.name
+                            input_pdf_path.write_bytes(file.getvalue())
+
+                            command = ["monopoly", str(input_pdf_path), "-o", str(temp_dir_path)]
+                            subprocess.run(command, check=True, capture_output=True, text=True)
+
+                            csv_files = list(temp_dir_path.glob("*.csv"))
+                            if not csv_files:
+                                st.warning(f"Could not find CSV for {file.name}, skipping.")
+                                st.session_state.file_progress_index = current_file_index + 1
+                                continue # Skip to the next file
+                                
+                            data = pd.read_csv(csv_files[0])
+                        
+                        columns_to_keep = ['date', 'description', 'amount']
+                        preview_data = data[columns_to_keep].copy()
+                        preview_data['Category'] = "" # Start with blank
+                        st.session_state.current_file_data = preview_data 
                 else:
-                    st.error("No data was processed from files.")
-                    st.session_state.app_step = "1_upload"
-                    st.rerun()
-            # --- End of one-time block ---
+                    preview_data = st.session_state.current_file_data
 
-            # Get the data (either new or partially-processed)
-            preview_data = st.session_state.processed_data
+                # --- 2. Run the AI Loop (if "Stop" is not pressed) ---
+                num_rows = len(preview_data)
+                time_per_row = 4.1 
+                row_bookmark = st.session_state.row_progress_index
 
-            # --- AI Loop with "Stop" Button ---
-            progress_col, stop_col = st.columns([0.8, 0.2])
-            
-            with progress_col:
-                progress_bar = st.progress(0, text="AI is categorizing...")
-            with stop_col:
-                if st.button("Stop AI ⏹️"):
-                    st.session_state.stop_ai = True
-                    st.warning("Stopping AI process... progress will be saved.")
-            
-            total_rows = len(preview_data)
-            
-            # Get our "bookmark"
-            start_index = st.session_state.ai_progress_index
-            
-            # Loop *from* our bookmark
-            for index, row in preview_data.iloc[start_index:].iterrows():
-                
-                # Check the emergency brake FIRST
-                if st.session_state.stop_ai:
-                    break # Just stop the loop. Don't do anything else.
+                for index, row in preview_data.iloc[row_bookmark:].iterrows():
+                    
+                    # --- THIS IS THE *ONLY* STOP CHECK ---
+                    if st.session_state.stop_ai:
+                        break # Stop this *inner* AI loop
+                    
+                    # (Timers)
+                    rows_left = num_rows - st.session_state.row_progress_index
+                    total_eta_seconds = rows_left * time_per_row
+                    eta_text = format_time(total_eta_seconds)
+                    eta_placeholder.markdown(f"#### Processing `{file.name}` ({current_file_index+1}/{total_files})")
+                    progress_bar.progress((st.session_state.row_progress_index + 1) / num_rows, text=f"Est. Time Remaining: {eta_text}")
+                    
+                    guess = get_ai_category(row['description'], st.session_state.categories)
+                    preview_data.at[index, 'Category'] = guess
+                    st.session_state.current_file_data = preview_data
+                    
+                    # (Row Countdown Timer)
+                    for t in range(int(time_per_row), 0, -1):
+                        row_timer_placeholder.info(f"Categorizing: `{row['description'][:30]}...` (Waiting for quota... {t}s)")
+                        time.sleep(1)
+                    time.sleep(time_per_row - int(time_per_row))
+                    
+                    st.session_state.row_progress_index = preview_data.index.get_loc(index) + 1
 
-                guess = get_ai_category(row['description'], st.session_state.categories)
-                preview_data.at[index, 'Category'] = guess
-                
-                progress_text = f"Categorizing: {row['description'][:30]}... (Waiting for quota)"
-                progress_bar.progress((index + 1) / total_rows, text=progress_text)
-                
-                # --- Save our progress ("bookmark") ---
-                # We use the iloc (integer location) + start_index to get the *real* row number
-                current_row_number = preview_data.index.get_loc(index)
-                st.session_state.ai_progress_index = current_row_number + 1
-                st.session_state.processed_data = preview_data # Save the data with the new guess
+                # --- 3. After the *inner* loop (file is done or stopped) ---
+                st.session_state.all_processed_data.append(st.session_state.current_file_data)
+                st.session_state.file_progress_index = current_file_index + 1
+                st.session_state.row_progress_index = 0
+                st.session_state.current_file_data = None 
 
-                time.sleep(4.1) # Our 15 RPM-safe delay
-
+            # --- 4. Finalize (After *outer* loop) ---
+            eta_placeholder.empty()
+            row_timer_placeholder.empty()
             progress_bar.empty()
-            st.success("AI categorization complete! (Or stopped)")
             
-            # --- Reset for next time ---
-            st.session_state.ai_progress_index = 0
+            if not st.session_state.all_processed_data:
+                st.error("No data was processed.")
+                st.session_state.app_step = "1_upload"
+            else:
+                final_data = pd.concat(st.session_state.all_processed_data, ignore_index=True)
+                st.session_state.processed_data = final_data
+                st.success("Processing complete! (AI was stopped early)") if st.session_state.stop_ai else st.success("AI categorization complete!")
+                st.session_state.app_step = "4_display"
+
+            # Reset bookmarks for the *next* full job
+            st.session_state.file_progress_index = 0
+            st.session_state.row_progress_index = 0
             st.session_state.stop_ai = False
-            st.session_state.app_step = "4_display"
+            st.session_state.all_processed_data = []
+            st.session_state.current_file_data = None
             st.rerun()
 
         except subprocess.CalledProcessError as e:
             st.error(f"An error occurred while processing: {e.stderr}")
-            st.session_state.app_step = "1_upload" # Reset on failure
-            st.session_state.processed_data = None # Clear data on failure
-            st.session_state.ai_progress_index = 0
+            # Reset everything on failure
+            st.session_state.app_step = "1_upload"
+            st.session_state.processed_data = None
+            st.session_state.file_progress_index = 0
+            st.session_state.row_progress_index = 0
+            st.session_state.all_processed_data = []
+            st.session_state.current_file_data = None
 
     # --- STEP 3B: PROCESS *WITHOUT* AI ---
     if st.session_state.app_step == "3_process_no_ai":
@@ -336,8 +420,14 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
         
+        # --- This is the new, simple, "vibe-approved" editor ---
+    
+        # 1. Read the data from the "magic whiteboard"
+        data_for_editor = st.session_state.processed_data 
+        
+        # 2. Give that data to the "dumb" editor and get back its new state
         configured_editor = st.data_editor(
-            st.session_state.processed_data,
+            data_for_editor,  # Use the data we just read
             num_rows="dynamic",
             column_config={
                 "Category": st.column_config.SelectboxColumn(
@@ -346,9 +436,11 @@ with tab1:
                     options=st.session_state.categories,
                     required=True
                 )
-            },
-            key="data_editor"
+            }
+            # Note: NO "key=" and NO "on_change=" !!
         )
+        
+        # 3. Save the *returned* data right back to the "magic whiteboard"
         st.session_state.processed_data = configured_editor
 
         st.divider() # A nice horizontal line
@@ -368,8 +460,16 @@ with tab1:
              # Reset everything
             st.session_state.processed_data = None
             st.session_state.app_step = "1_upload"
-            st.session_state.ai_progress_index = 0
+            st.session_state.ai_progress_index = 0 # (This one is old, we can remove it)
             st.session_state.stop_ai = False
+            
+            # --- ADD THESE RESETS ---
+            st.session_state.all_processed_data = []
+            st.session_state.file_progress_index = 0
+            st.session_state.row_progress_index = 0
+            st.session_state.current_file_data = None
+            # --- END OF RESETS ---
+            
             st.rerun()
 
 with tab2:
@@ -390,6 +490,7 @@ with tab2:
                 all_data_list = [pd.read_excel(MASTER_FILE, sheet_name=sheet, index_col=0) for sheet in sheet_names]
                 all_data = pd.concat(all_data_list)
                 all_data.fillna(0, inplace=True) # Replace any empty cells with 0
+                all_data = all_data * -1
 
                 # --- 1. CALCULATE METRICS ---
                 total_spent = all_data.values.sum()
@@ -438,7 +539,7 @@ with tab2:
                     order=alt.Order("Total", sort="descending"),
                     
                     # Add a tooltip to show details on hover
-                    tooltip=["Category", "Total"]
+                    tooltip=["Category", alt.Tooltip("Total", format="$,.2f")]
                 ).properties(
                     title="Spending Breakdown by Category"
                 )
@@ -452,7 +553,7 @@ with tab2:
                 
                 # We already have `all_data_list` and `sheet_names`
                 # Let's calculate the total for each month
-                monthly_totals_list = [sheet.values.sum() for sheet in all_data_list]
+                monthly_totals_list = [sheet.values.sum() * -1 for sheet in all_data_list]
                 
                 # Create a simple DataFrame for Streamlit's bar chart
                 heartbeat_data = pd.DataFrame({
