@@ -1,0 +1,19 @@
+# --- Vibe Coder "DO NOT UPLOAD" List ---
+
+# 1. Security: Never upload our secret API keys!
+.streamlit/secrets.toml
+
+# 2. Privacy: Never upload our personal finance data!
+master_spreadsheet.xlsx
+*.xlsx
+
+# 3. Cleanliness: Ignore our "Project Box" (it's huge)
+venv/
+.venv/
+
+# 4. Cleanliness: Ignore Python's temporary cache files
+__pycache__/
+*.pyc
+
+# 5. Cleanliness: Ignore macOS's hidden system files
+.DS_Store

@@ -1,0 +1,15 @@
+[theme]
+# The "vibe" accent color for buttons, links, etc. (Mint Green)
+primaryColor="#00f2c3"
+
+# The main app background (a very dark gray, almost black)
+backgroundColor="#0D1117"
+
+# The background for sidebar, data editor, etc. (a slightly lighter dark)
+secondaryBackgroundColor="#161B22"
+
+# The main text color (a soft white)
+textColor="#c9d1d9"
+
+# Font
+font="sans serif"
