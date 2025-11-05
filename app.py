@@ -129,8 +129,6 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     - If 'existing_file_buffer' is None, it creates a new file.
     - If 'existing_file_buffer' is provided, it merges the data.
     """
-    SECRET_SHEET = ".vibe-check"
-    SECRET_CODE = "VIBE-FINANCE-TRACKER-v1"
     output_buffer = BytesIO()
     excel_data = {} # This will hold all our sheets
 
@@ -141,7 +139,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
             existing_file_buffer.seek(0)
             with pd.ExcelFile(existing_file_buffer, engine='openpyxl') as xls:
                 # Load *all* old data
-                excel_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names if sheet != SECRET_SHEET}
+                excel_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names}
         except Exception as e:
             st.error(f"Error reading uploaded master file: {e}")
             excel_data = {} # Start fresh if file is corrupt
@@ -190,34 +188,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
             worksheet.set_column(0, 0, 12) # Date column
             worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format) # Money columns
 
-        # --- ADD THE "SECRET VIBE-STAMP" ---
-        signature_df = pd.DataFrame({"code": [SECRET_CODE]})
-        signature_df.to_excel(writer, sheet_name=SECRET_SHEET, index=False, header=False)
-        writer.sheets[SECRET_SHEET].hide()
-    
     return output_buffer.getvalue() # Return the "in-memory" file
-
-def check_file_signature(uploaded_file):
-    """
-    This is our "bouncer". It checks an uploaded Excel file
-    for our hidden ".vibe-check" signature.
-    """
-    SECRET_SHEET = ".vibe-check"
-    SECRET_CODE = "VIBE-FINANCE-TRACKER-v1"
-    
-    try:
-        # Read the file from memory, *only* loading our secret sheet
-        df = pd.read_excel(uploaded_file, sheet_name=SECRET_SHEET)
-        
-        # Check if the secret code is in the first cell
-        if df.iloc[0, 0] == SECRET_CODE:
-            return True # Vibe-Pass!
-        else:
-            return False # Vibe-Fail (Wrong code)
-    except Exception as e:
-        # This triggers if the file isn't an Excel file
-        # or (most likely) the ".vibe-check" sheet doesn't exist.
-        return False # Vibe-Fail (No sheet)
 
 # --- SESSION STATE ---
 if 'app_step' not in st.session_state:
@@ -505,18 +476,10 @@ with tab1:
 
         # --- Button 2: Merge & Download ---
         with col2:
-            # First, check if a "vibe-approved" file is uploaded
+            # First, check if a file is uploaded
             uploaded_file = st.session_state.uploaded_master_file
-            is_valid_file = False
+            
             if uploaded_file:
-                uploaded_file.seek(0) # Reset buffer
-                if check_file_signature(uploaded_file):
-                    is_valid_file = True
-                else:
-                    st.error(f"`{uploaded_file.name}` is not a valid Vibe Tracker file.", icon="🚫")
-
-            # If the file is valid, show the "Merge" button
-            if is_valid_file:
                 # Call the "Master Chef" with *both* new data and the old file
                 excel_data_merged = convert_df_to_excel(final_data_to_save, existing_file_buffer=uploaded_file)
                 
@@ -527,8 +490,8 @@ with tab1:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
-                # If no valid file, show a "disabled" vibe
-                st.button("Merge with Uploaded Master", disabled=True, help="Please upload a valid 'master_spreadsheet.xlsx' (created by this app) to enable merging.")
+                # If no file, show a "disabled" vibe
+                st.button("Merge with Uploaded Master", disabled=True, help="Please upload a 'master_spreadsheet.xlsx' to enable merging.")
 
         if st.button("Process New Files"):
              # Reset everything
@@ -549,53 +512,42 @@ with tab1:
 with tab2:
     st.subheader("My Financial Dashboard")
     
-    # --- NEW "CLOUD-VIBE" LOGIC ---
+    # --- NEW "CLOUD-VIBE" LOGIC (No "Bouncer") ---
     if st.session_state.uploaded_master_file is None:
         st.info("Upload your 'master_spreadsheet.xlsx' in the 'Data Processing' tab to see your dashboard.")
-        # We also need to clear any "old" data from the dashboard
         all_data = pd.DataFrame() 
-        category_totals = pd.Series(dtype='float64')
         sheet_names = []
 
     else:
-        # We have a file! Let's "vibe-check" it.
+        # We have a file! Let's *try* to read it.
         uploaded_file = st.session_state.uploaded_master_file
+        uploaded_file.seek(0) # Reset buffer
         
-        # We must "reset" the file buffer so pandas can read it
-        uploaded_file.seek(0) 
-        
-        if check_file_signature(uploaded_file):
+        try:
             st.success(f"Dashboard loaded from `{uploaded_file.name}`!")
-            try:
-                # Load all data from the *uploaded file*
-                with pd.ExcelFile(uploaded_file, engine='openpyxl') as xls:
-                    sheet_names = [s for s in xls.sheet_names if s not in ['Dashboard', '.vibe-check']]
-                
-                if not sheet_names:
-                    st.info("Your master file doesn't have any monthly data yet.")
-                    all_data = pd.DataFrame()
-                else:
-                    # We must "reset" the buffer *again* for the *next* read
-                    uploaded_file.seek(0)
-                    all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
-                    all_data = pd.concat(all_data_list)
-                    all_data.fillna(0, inplace=True)
-                    all_data = all_data * -1 # Apply our "Net Spend" vibe
-
-            except Exception as e:
-                st.error(f"Error reading dashboard file: {e}")
-                st.info("The master file might be corrupt.")
+            # Load all data from the *uploaded file*
+            with pd.ExcelFile(uploaded_file, engine='openpyxl') as xls:
+                sheet_names = [s for s in xls.sheet_names if s not in ['Dashboard', '.vibe-check']]
+            
+            if not sheet_names:
+                st.info("Your master file doesn't have any monthly data yet.")
                 all_data = pd.DataFrame()
-        
-        else:
-            st.error(f"Vibe-Check Failed! `{uploaded_file.name}` is not a valid Vibe Tracker file. Please upload a file you downloaded from this app.")
+            else:
+                uploaded_file.seek(0)
+                all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
+                all_data = pd.concat(all_data_list)
+                all_data.fillna(0, inplace=True)
+                all_data = all_data * -1 # Apply our "Net Spend" vibe
+
+        except Exception as e:
+            st.error(f"Error reading `{uploaded_file.name}`: {e}")
+            st.info("The file might be corrupt, not an Excel file, or not a valid master file.")
             all_data = pd.DataFrame()
             sheet_names = []
 
     # --- ALL OUR "VIBE" CHARTS ---
-    # (This code is mostly the same, but it's now "safer")
-    
     if not all_data.empty:
+        # (All our chart logic... it's all the same!)
         # --- 1. CALCULATE METRICS ---
         total_spent = all_data.values.sum()
         category_totals = all_data.sum(axis=0)
@@ -636,7 +588,6 @@ with tab2:
             st.header("The Financial Heartbeat")
             st.write("Your total spending, month by month.")
             
-            # We must "reset" the buffer *again*
             uploaded_file.seek(0)
             all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
             
@@ -644,6 +595,10 @@ with tab2:
             heartbeat_data = pd.DataFrame({'Month': sheet_names, 'Total Spend': monthly_totals_list})
             heartbeat_data = heartbeat_data.set_index('Month')
             st.bar_chart(heartbeat_data, use_container_width=True, color="#00f2c3")
-            
     else:
-        st.info("Your dashboard is empty.")
+        if st.session_state.uploaded_master_file is not None:
+            # This catches the case where the file was *bad*
+            st.warning("Could not read any data from the uploaded file.")
+        else:
+            # This is the normal "empty" state
+            st.info("Your dashboard is empty.")
