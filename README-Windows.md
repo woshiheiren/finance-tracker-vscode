@@ -23,7 +23,7 @@ First, you need a tool called **Chocolatey**. It's the "Package Manager for code
     *(It might ask you to confirm, just type `Y` and press **Enter**).*
 4.  Now, copy and paste this *entire* command into that same PowerShell window to install Chocolatey. It's a long one!
     ```powershell
-    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('[https://community.chocolatey.org/install.ps1](https://community.chocolatey.org/install.ps1)'))
+    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     ```
 5.  After it finishes, **close the PowerShell window**.
 
