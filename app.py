@@ -193,7 +193,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         # --- ADD THE "SECRET VIBE-STAMP" ---
         signature_df = pd.DataFrame({"code": [SECRET_CODE]})
         signature_df.to_excel(writer, sheet_name=SECRET_SHEET, index=False, header=False)
-        workbook.sheets[SECRET_SHEET].hide()
+        writer.sheets[SECRET_SHEET].hide()
     
     return output_buffer.getvalue() # Return the "in-memory" file
 
