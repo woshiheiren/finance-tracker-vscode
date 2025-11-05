@@ -58,3 +58,4 @@ tzdata==2025.2
 uritemplate==4.2.0
 urllib3==2.5.0
 xlsxwriter==3.2.9
+monopoly-core
