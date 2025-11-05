@@ -207,7 +207,7 @@ def check_file_signature(uploaded_file):
     
     try:
         # Read the file from memory, *only* loading our secret sheet
-        df = pd.read_excel(uploaded_file, sheet_name=SECRET_SHEET, engine='openpyxl')
+        df = pd.read_excel(uploaded_file, sheet_name=SECRET_SHEET)
         
         # Check if the secret code is in the first cell
         if df.iloc[0, 0] == SECRET_CODE:
