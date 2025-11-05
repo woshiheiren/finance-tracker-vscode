@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 import xlsxwriter
 import altair as alt
+from io import BytesIO
 
 st.set_page_config(
     page_title="Vibe Finance Tracker",
@@ -122,50 +123,40 @@ def process_files_to_dataframe(uploaded_files):
         return pd.concat(all_data, ignore_index=True)
     return None
 
-def save_to_master_file(data_to_save):
-    MASTER_FILE = "master_spreadsheet.xlsx"
+def convert_df_to_excel(new_data_df, existing_file_buffer=None):
+    """
+    This is our new "Master Chef" converter.
+    - If 'existing_file_buffer' is None, it creates a new file.
+    - If 'existing_file_buffer' is provided, it merges the data.
+    """
+    output_buffer = BytesIO()
+    excel_data = {} # This will hold all our sheets
+
+    # --- VIBE 1: MERGE WITH EXISTING FILE ---
+    if existing_file_buffer is not None:
+        try:
+            # We must "reset" the buffer so pandas can read it
+            existing_file_buffer.seek(0)
+            with pd.ExcelFile(existing_file_buffer, engine='openpyxl') as xls:
+                # Load *all* old data
+                excel_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names}
+        except Exception as e:
+            st.error(f"Error reading uploaded master file: {e}")
+            excel_data = {} # Start fresh if file is corrupt
     
-    # 1. Prepare the data
-    df = data_to_save.copy()
+    # --- VIBE 2: PREPARE NEW DATA ---
+    if 'Dashboard' not in excel_data:
+         excel_data['Dashboard'] = pd.DataFrame() # Ensure Dashboard exists
     
-    # 2. Apply Fail-safe
+    df = new_data_df.copy()
     df['Category'] = df['Category'].fillna('Other').replace('', 'Other')
-    
-    # 3. Convert 'date' column to datetime objects
     df['date'] = pd.to_datetime(df['date'])
-    
-    # 4. Create the 'tab_name' column (e.g., "July 2025")
     df['tab_name'] = df['date'].dt.strftime('%B %Y')
-    
-    # 5. Get a list of unique tabs we need to update
     tabs_to_update = df['tab_name'].unique()
-    
-    # 6. Check if file exists, or create it
-    if not Path(MASTER_FILE).exists():
-        # Create a new file with a blank Dashboard
-        with pd.ExcelWriter(MASTER_FILE, engine='xlsxwriter') as writer:
-            pd.DataFrame().to_excel(writer, sheet_name='Dashboard')
-        st.toast(f"Created new {MASTER_FILE}")
 
-    # 7. Load all existing data from the master file
-    try:
-        with pd.ExcelFile(MASTER_FILE) as xls:
-            existing_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names}
-    except (InvalidFileException, ValueError, KeyError):
-        st.error("Error reading master file. It might be corrupt. Creating a new one.")
-        existing_data = {}
-        if 'Dashboard' not in existing_data:
-             existing_data['Dashboard'] = pd.DataFrame() # Ensure Dashboard exists
-
-    # 8. Loop through each tab we need to update
+    # --- VIBE 3: MERGE/ADD NEW DATA ---
     for tab_name in tabs_to_update:
-        # Get all *new* transactions for this tab
         new_data_for_tab = df[df['tab_name'] == tab_name]
-        
-        # Pivot the new data
-        # index = 'date' (rows)
-        # columns = 'Category'
-        # values = 'amount' (sum them up)
         new_pivot = new_data_for_tab.pivot_table(
             index='date',
             columns='Category',
@@ -174,40 +165,34 @@ def save_to_master_file(data_to_save):
             fill_value=0
         )
         
-        # 9. Check if we have *old* data for this tab
-        if tab_name in existing_data:
-            old_pivot = existing_data[tab_name]
-            # Combine old and new. This is the "summation" logic!
+        if tab_name in excel_data:
+            # Merge Vibe: Add new data to old data
+            old_pivot = excel_data[tab_name]
             combined_pivot = old_pivot.add(new_pivot, fill_value=0)
-            existing_data[tab_name] = combined_pivot
+            excel_data[tab_name] = combined_pivot
         else:
-            # This is a brand new tab
-            existing_data[tab_name] = new_pivot
+            # New Tab Vibe: Just add the new data
+            excel_data[tab_name] = new_pivot
 
-    with pd.ExcelWriter(MASTER_FILE, engine='xlsxwriter') as writer:
+    # --- VIBE 4: WRITE TO "IN-MEMORY" FILE ---
+    with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
         accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
-        for sheet_name, sheet_data in existing_data.items():
-            # Ensure the index (date) is formatted nicely
+        
+        for sheet_name, sheet_data in excel_data.items():
             if isinstance(sheet_data.index, pd.DatetimeIndex):
                 sheet_data.index = sheet_data.index.date
             sheet_data.to_excel(writer, sheet_name=sheet_name)
             worksheet = writer.sheets[sheet_name]
     
-            # Set Column A (the "Date" column) to a width of 12
-            worksheet.set_column(0, 0, 12)
-            
-            # Set Column B to the end to a width of 15 (for Accounting)
-            worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format)
-    
-    return True # Success
+            worksheet.set_column(0, 0, 12) # Date column
+            worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format) # Money columns
+
+    return output_buffer.getvalue() # Return the "in-memory" file
 
 # --- SESSION STATE ---
 if 'app_step' not in st.session_state:
     st.session_state.app_step = "1_upload" # Tracks our app's current step
-
-if 'ai_progress_index' not in st.session_state:
-    st.session_state.ai_progress_index = 0 # Our "bookmark"
 
 if 'stop_ai' not in st.session_state:
     st.session_state.stop_ai = False # Our "emergency brake"
@@ -226,6 +211,12 @@ if 'file_progress_index' not in st.session_state:
 
 if 'row_progress_index' not in st.session_state:
     st.session_state.row_progress_index = 0 # Bookmark for *which row*
+
+if 'current_file_data' not in st.session_state:
+    st.session_state.current_file_data = None
+
+if 'uploaded_master_file' not in st.session_state:
+    st.session_state.uploaded_master_file = None
 
 
 # --- SIDEBAR ---
@@ -248,6 +239,23 @@ tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
 with tab1:
     st.write("Welcome to my app! Let's get those finances organized.")
     uploaded_files = st.file_uploader("Upload your PDF bank statements here:", accept_multiple_files=True, type="pdf")
+
+    # --- "CLOUD-VIBE" UPLOADER ---
+    st.divider()
+    st.subheader("Already have a Master File?")
+    st.write("Upload your `master_spreadsheet.xlsx` here to merge new data or view your dashboard.")
+    
+    uploaded_master = st.file_uploader(
+        "Upload your 'master_spreadsheet.xlsx'", 
+        type="xlsx",
+        accept_multiple_files=False,
+        key="master_uploader" # Give it a "vibe" key
+    )
+    
+    if uploaded_master:
+        st.session_state.uploaded_master_file = uploaded_master
+        st.success(f"Loaded `{uploaded_master.name}`! Go to the 'Dashboard' tab to see your stats.")
+    # --- END "CLOUD-VIBE" UPLOADER ---
 
     # --- STEP 1: SHOW THE "PROCESS" BUTTON ---
     if uploaded_files and st.session_state.app_step == "1_upload":
@@ -443,18 +451,47 @@ with tab1:
         # 3. Save the *returned* data right back to the "magic whiteboard"
         st.session_state.processed_data = configured_editor
 
-        st.divider() # A nice horizontal line
-        st.subheader("Save Your Work")
-        st.write("This will save your edited data to `master_spreadsheet.xlsx`")
+        # --- NEW "CLOUD-VIBE" DOWNLOAD SECTION (FINAL) ---
+        st.divider()
+        st.subheader("Your Data is Ready!")
+        st.write("You can now download your processed transactions.")
         
-        if st.button("Save to Master File", type="primary"):
-            with st.spinner("Saving to master file..."):
-                final_data_to_save = st.session_state.processed_data
-                if save_to_master_file(final_data_to_save):
-                    st.success(f"Successfully saved {len(final_data_to_save)} transactions to `master_spreadsheet.xlsx`!")
-                    st.balloons()
-                else:
-                    st.error("An error occurred while saving.")
+        # Get our "magic whiteboard" data
+        final_data_to_save = st.session_state.processed_data
+        
+        col1, col2 = st.columns(2)
+
+        # --- Button 1: Download as New ---
+        with col1:
+            # Call the "Master Chef" with *only* new data
+            excel_data_new = convert_df_to_excel(final_data_to_save, existing_file_buffer=None)
+            
+            st.download_button(
+                label="Download as New Spreadsheet",
+                data=excel_data_new,
+                file_name="master_spreadsheet_new.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+
+        # --- Button 2: Merge & Download ---
+        with col2:
+            # First, check if a file is uploaded
+            uploaded_file = st.session_state.uploaded_master_file
+            
+            if uploaded_file:
+                # Call the "Master Chef" with *both* new data and the old file
+                excel_data_merged = convert_df_to_excel(final_data_to_save, existing_file_buffer=uploaded_file)
+                
+                st.download_button(
+                    label="Merge & Download",
+                    data=excel_data_merged,
+                    file_name="master_spreadsheet_merged.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                # If no file, show a "disabled" vibe
+                st.button("Merge with Uploaded Master", disabled=True, help="Please upload a 'master_spreadsheet.xlsx' to enable merging.")
 
         if st.button("Process New Files"):
              # Reset everything
@@ -474,98 +511,94 @@ with tab1:
 
 with tab2:
     st.subheader("My Financial Dashboard")
-    MASTER_FILE = "master_spreadsheet.xlsx"
+    
+    # --- NEW "CLOUD-VIBE" LOGIC (No "Bouncer") ---
+    if st.session_state.uploaded_master_file is None:
+        st.info("Upload your 'master_spreadsheet.xlsx' in the 'Data Processing' tab to see your dashboard.")
+        all_data = pd.DataFrame() 
+        sheet_names = []
 
-    if not Path(MASTER_FILE).exists():
-        st.info("Your dashboard is empty. Process some files in the 'Data Processing' tab to see your stats!")
     else:
+        # We have a file! Let's *try* to read it.
+        uploaded_file = st.session_state.uploaded_master_file
+        uploaded_file.seek(0) # Reset buffer
+        
         try:
-            # Load all data
-            with pd.ExcelFile(MASTER_FILE) as xls:
-                sheet_names = [s for s in xls.sheet_names if s != 'Dashboard']
+            st.success(f"Dashboard loaded from `{uploaded_file.name}`!")
+            # Load all data from the *uploaded file*
+            with pd.ExcelFile(uploaded_file, engine='openpyxl') as xls:
+                sheet_names = [s for s in xls.sheet_names if s not in ['Dashboard', '.vibe-check']]
             
             if not sheet_names:
-                st.info("No monthly data found. Process some files to build your dashboard.")
+                st.info("Your master file doesn't have any monthly data yet.")
+                all_data = pd.DataFrame()
             else:
-                all_data_list = [pd.read_excel(MASTER_FILE, sheet_name=sheet, index_col=0) for sheet in sheet_names]
+                uploaded_file.seek(0)
+                all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
                 all_data = pd.concat(all_data_list)
-                all_data.fillna(0, inplace=True) # Replace any empty cells with 0
-                all_data = all_data * -1
+                all_data.fillna(0, inplace=True)
+                all_data = all_data * -1 # Apply our "Net Spend" vibe
 
-                # --- 1. CALCULATE METRICS ---
-                total_spent = all_data.values.sum()
-                
-                # Sum by category (columns)
-                category_totals = all_data.sum(axis=0)
-                top_category = category_totals.idxmax()
-                top_category_value = category_totals.max()
-                
-                num_months = len(sheet_names)
-                avg_per_month = total_spent / num_months
-
-                # --- 2. DISPLAY "HEADLINE NEWS" METRICS ---
-                st.header("Headline News")
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    with st.container(border=True):
-                        st.metric("Total Recorded Spend", f"${total_spent:,.2f}")
-
-                with col2:
-                    with st.container(border=True):
-                        st.metric(f"Top Category: {top_category}", f"${top_category_value:,.2f}")
-
-                with col3:
-                    with st.container(border=True):
-                        st.metric("Avg. Monthly Spend", f"${avg_per_month:,.2f}")
-
-                # --- 3. DISPLAY "THE SPENDING PIE" ---
-                st.divider() # Adds a nice horizontal line
-                st.header("The Spending Pie")
-                
-                # We already have `category_totals` from the "Headline News"
-                # We just need to format it for Altair
-                pie_data = category_totals.reset_index(name='Total').rename(columns={'index': 'Category'})
-                
-                # Build the donut chart
-                donut_chart = alt.Chart(pie_data).mark_arc(outerRadius=120, innerRadius=80).encode(
-                    # The "slice" size is based on the "Total"
-                    theta=alt.Theta("Total:Q", stack=True), 
-                    
-                    # The "color" is based on the "Category"
-                    color=alt.Color("Category:N"),
-                    
-                    # Order the slices from biggest to smallest
-                    order=alt.Order("Total", sort="descending"),
-                    
-                    # Add a tooltip to show details on hover
-                    tooltip=["Category", alt.Tooltip("Total", format="$,.2f")]
-                ).properties(
-                    title="Spending Breakdown by Category"
-                )
-                
-                st.altair_chart(donut_chart, use_container_width=True)
-
-                # --- 4. DISPLAY "THE FINANCIAL HEARTBEAT" ---
-                st.divider() # Adds a nice horizontal line
-                st.header("The Financial Heartbeat")
-                st.write("Your total spending, month by month.")
-                
-                # We already have `all_data_list` and `sheet_names`
-                # Let's calculate the total for each month
-                monthly_totals_list = [sheet.values.sum() * -1 for sheet in all_data_list]
-                
-                # Create a simple DataFrame for Streamlit's bar chart
-                heartbeat_data = pd.DataFrame({
-                    'Month': sheet_names,
-                    'Total Spend': monthly_totals_list
-                })
-                
-                # Set 'Month' as the index so the chart labels are correct
-                heartbeat_data = heartbeat_data.set_index('Month')
-                
-                st.bar_chart(heartbeat_data, use_container_width=True, color="#00f2c3")
-        
         except Exception as e:
-            st.error(f"Error reading dashboard file: {e}")
-            st.info("The master file might be open or corrupt.")
+            st.error(f"Error reading `{uploaded_file.name}`: {e}")
+            st.info("The file might be corrupt, not an Excel file, or not a valid master file.")
+            all_data = pd.DataFrame()
+            sheet_names = []
+
+    # --- ALL OUR "VIBE" CHARTS ---
+    if not all_data.empty:
+        # (All our chart logic... it's all the same!)
+        # --- 1. CALCULATE METRICS ---
+        total_spent = all_data.values.sum()
+        category_totals = all_data.sum(axis=0)
+        top_category = category_totals.idxmax()
+        top_category_value = category_totals.max()
+        num_months = len(sheet_names)
+        avg_per_month = total_spent / num_months if num_months > 0 else 0
+
+        # --- 2. DISPLAY "HEADLINE NEWS" METRICS ---
+        st.header("Headline News")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            with st.container(border=True):
+                st.metric("Total Recorded Spend", f"${total_spent:,.2f}")
+        with col2:
+            with st.container(border=True):
+                st.metric(f"Top Category: {top_category}", f"${top_category_value:,.2f}")
+        with col3:
+            with st.container(border=True):
+                st.metric("Avg. Monthly Spend", f"${avg_per_month:,.2f}")
+
+        # --- 3. DISPLAY "THE SPENDING PIE" ---
+        st.divider()
+        st.header("The Spending Pie")
+        colA, colB = st.columns(2)
+        with colA:
+            pie_data = category_totals.reset_index(name='Total').rename(columns={'index': 'Category'})
+            donut_chart = alt.Chart(pie_data).mark_arc(outerRadius=120, innerRadius=80).encode(
+                theta=alt.Theta("Total:Q", stack=True), 
+                color=alt.Color("Category:N"),
+                order=alt.Order("Total", sort="descending"),
+                tooltip=["Category", alt.Tooltip("Total", format="$,.2f")]
+            ).properties(title="Spending Breakdown by Category")
+            st.altair_chart(donut_chart, use_container_width=True)
+
+        # --- 4. DISPLAY "THE FINANCIAL HEARTBEAT" ---
+        with colB:
+            st.header("The Financial Heartbeat")
+            st.write("Your total spending, month by month.")
+            
+            uploaded_file.seek(0)
+            all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
+            
+            monthly_totals_list = [sheet.values.sum() * -1 for sheet in all_data_list]
+            heartbeat_data = pd.DataFrame({'Month': sheet_names, 'Total Spend': monthly_totals_list})
+            heartbeat_data = heartbeat_data.set_index('Month')
+            st.bar_chart(heartbeat_data, use_container_width=True, color="#00f2c3")
+    else:
+        if st.session_state.uploaded_master_file is not None:
+            # This catches the case where the file was *bad*
+            st.warning("Could not read any data from the uploaded file.")
+        else:
+            # This is the normal "empty" state
+            st.info("Your dashboard is empty.")

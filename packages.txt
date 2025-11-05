@@ -1,0 +1,5 @@
+poppler-utils
+ocrmypdf
+tesseract-ocr
+pkg-config
+libpoppler-cpp-dev
