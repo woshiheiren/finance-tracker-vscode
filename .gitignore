@@ -18,3 +18,5 @@ __pycache__/
 
 # 5. Cleanliness: Ignore macOS's hidden system files
 .DS_Store
+Thumbs.db
+desktop.ini
