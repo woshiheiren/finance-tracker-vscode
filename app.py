@@ -311,58 +311,6 @@ if 'uploaded_master_file' not in st.session_state:
 
 
 
-
-
-def sync_editor_state():
-
-    """
-
-    This is our "dumb waiter" (on_change callback).
-
-    It force-syncs our "manager's clipboard" (processed_data)
-
-    with our "chef's clipboard" (data_editor), using the
-
-    *correct 5-column blueprint*.
-
-    """
-
-    
-
-    # 1. Get the "chef's" data
-
-    editor_data = st.session_state.data_editor
-
-    
-
-    # 2. Check the "vibe" (this is our "pro-vibe" guard rail)
-
-    if editor_data is not None:
-
-        # Vibe 1: The "chef" has data (even an empty list [])
-
-        st.session_state.processed_data = pd.DataFrame.from_records(
-
-            editor_data,
-
-            columns=["date", "description", "amount", "Category", "File Name"] # The "Master Blueprint"
-
-        )
-
-    else:
-
-        # Vibe 2: The "chef" is confused (state is None).
-
-        st.session_state.processed_data = pd.DataFrame(
-
-            columns=["date", "description", "amount", "Category", "File Name"] # The "Master Blueprint"
-
-        )
-
-
-
-
-
 # --- SIDEBAR ---
 st.sidebar.title("App Settings")
 st.sidebar.subheader("Manage Your Categories")
@@ -576,10 +524,12 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
         
-        # This is the "pro-vibe" editor.
-        # It's "uncontrolled" and uses our "dumb waiter" to sync.
-        st.data_editor(
-            st.session_state.processed_data, # Read from our "manager's clipboard"
+        # 1. Read the data from the "magic whiteboard"
+        data_for_editor = st.session_state.processed_data 
+        
+        # 2. Give that data to the "dumb" editor and get back its new state
+        configured_editor = st.data_editor(
+            data_for_editor,  # Use the data we just read
             num_rows="dynamic",
             column_config={
                 "Category": st.column_config.SelectboxColumn(
@@ -592,10 +542,12 @@ with tab1:
                     "File Name",
                     disabled=True # "Hides" this column from the user
                 )
-            },
-            key="data_editor", # The "chef's" private clipboard
-            on_change=sync_editor_state # Our "bulletproof" translator
+            }
+            # Note: NO "key=" and NO "on_change=" !!
         )
+        
+        # 3. Save the *returned* data right back to the "magic whiteboard"
+        st.session_state.processed_data = configured_editor
 
 
 
