@@ -22,33 +22,47 @@ st.set_page_config(
 # --- CUSTOM CSS FOR "MODERN & CLEAN" VIBE ---
 st.markdown("""
 <style>
-/* --- TASK 1: THE FONT --- */
-/* We're importing "Inter", a clean, modern font used by top tech companies. */
+/* --- 1. THE FONT --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+/* --- 2. KEYFRAME ANIMATIONS (Our "Flipbooks") --- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px); /* Start invisible and 10px down */
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0); /* End visible and at its normal position */
+  }
+}
+
+/* --- 3. GLOBAL STYLES (The "House") --- */
 
 /* This targets the main app background */
 .stApp {
     background: radial-gradient(at top left, #1a004f 0%, #0d1117 70%);
-    /* We apply our new font to *everything* for a consistent feel */
     font-family: 'Inter', sans-serif;
+    
+    /* We apply our fade-in animation here */
+    animation: fadeIn 0.8s ease-out;
 }
 
 /* This makes the sidebar match */
 [data-testid="stSidebar"] {
     background-color: #0d1117;
-    /* Don't forget to update the sidebar font too! */
     font-family: 'Inter', sans-serif;
 }
 
 /* This makes the "cards" for our metrics pop */
-/* This targets the st.container(border=True) */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #161B22;
     border-radius: 10px; /* Rounded corners for a 'sleek' vibe */
     border: 1px solid #2a3038; /* A subtle border */
 }
 
-/* --- FUTURE TASKS (like animations) WILL GO HERE --- */
+/* --- 4. COMPONENT-SPECIFIC STYLES (The "Furniture") --- */
+/* (We'll add button styles here in the next task) */
 
 </style>
 """, unsafe_allow_html=True)
