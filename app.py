@@ -13,7 +13,7 @@ import altair as alt
 from io import BytesIO
 
 st.set_page_config(
-    page_title="Vibe Finance Tracker",
+    page_title="Woshi's Finance Tracker",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -233,7 +233,7 @@ st.session_state.categories = [
 st.sidebar.info("Your categories are now saved! The AI and the dropdowns will use this list.")
 
 # --- MAIN APP ---
-st.title("My Finance Tracker App")
+st.title("Woshi's Tracker App")
 tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
 
 with tab1:
