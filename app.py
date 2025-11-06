@@ -26,43 +26,91 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 /* --- 2. KEYFRAME ANIMATIONS (Our "Flipbooks") --- */
+
+/* The "Fade-In" for the whole page */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px); /* Start invisible and 10px down */
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0); /* End visible and at its normal position */
+    transform: translateY(0);
   }
 }
 
+/* The new "Pulse" for our primary buttons */
+@keyframes subtlePulse {
+  0% {
+    /* Start with no shadow */
+    box-shadow: 0 0 0 0 rgba(0, 242, 195, 0.4);
+  }
+  70% {
+    /* Expand the shadow to 10px, fully transparent */
+    box-shadow: 0 0 0 10px rgba(0, 242, 195, 0);
+  }
+  100% {
+    /* End with no shadow, ready to loop */
+    box-shadow: 0 0 0 0 rgba(0, 242, 195, 0);
+  }
+}
+
+
 /* --- 3. GLOBAL STYLES (The "House") --- */
 
-/* This targets the main app background */
 .stApp {
     background: radial-gradient(at top left, #1a004f 0%, #0d1117 70%);
     font-family: 'Inter', sans-serif;
-    
-    /* We apply our fade-in animation here */
     animation: fadeIn 0.8s ease-out;
 }
 
-/* This makes the sidebar match */
 [data-testid="stSidebar"] {
     background-color: #0d1117;
     font-family: 'Inter', sans-serif;
 }
 
-/* This makes the "cards" for our metrics pop */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #161B22;
-    border-radius: 10px; /* Rounded corners for a 'sleek' vibe */
-    border: 1px solid #2a3038; /* A subtle border */
+    border-radius: 10px;
+    border: 1px solid #2a3038;
 }
 
+
 /* --- 4. COMPONENT-SPECIFIC STYLES (The "Furniture") --- */
-/* (We'll add button styles here in the next task) */
+
+/* This targets Streamlit's "primary" buttons */
+[data-testid="stButton"] button[kind="primary"] {
+    background-color: #00f2c3; /* Our "vibe" color */
+    color: #0d1117; /* Dark text for contrast */
+    border: none;
+    border-radius: 8px; /* Slightly rounded */
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; /* Smooth transitions */
+    
+    /* Apply our new subtle pulse animation, looping forever */
+    animation: subtlePulse 2.5s infinite;
+}
+
+/* This is the "glow" on hover for primary buttons */
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background-color: #00f2c3; /* Keep the color */
+    box-shadow: 0 0 15px 5px rgba(0, 242, 195, 0.5); /* The "Glow" */
+    transform: scale(1.03); /* Slight "pop" */
+}
+
+/* This targets the "secondary" buttons (like "Stop AI", "Skip") */
+[data-testid="stButton"] button[kind="secondary"] {
+    border-color: #555; /* A subtle border */
+    color: #fff; /* White text */
+    border-radius: 8px;
+    transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease, color 0.3s ease;
+}
+
+/* This is the "glow" on hover for secondary buttons */
+[data-testid="stButton"] button[kind="secondary"]:hover {
+    border-color: #00f2c3; /* Glow the border with our vibe color */
+    color: #00f2c3; /* Glow the text with our vibe color */
+    transform: scale(1.03); /* Slight "pop" */
+}
 
 </style>
 """, unsafe_allow_html=True)
