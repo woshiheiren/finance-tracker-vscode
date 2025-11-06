@@ -234,6 +234,23 @@ st.session_state.categories = [
 ]
 st.sidebar.info("Your categories are now saved! The AI and the dropdowns will use this list.")
 
+    # --- "CLOUD-VIBE" UPLOADER ---
+    st.sidebar.divider()
+    st.sidebar.subheader("Already have a Master File?")
+    st.sidebar.write("Upload your `master_spreadsheet.xlsx` here to merge new data or view your dashboard.")
+    
+    uploaded_master = st.sidebar.file_uploader(
+        "Upload your 'master_spreadsheet.xlsx'", 
+        type="xlsx",
+        accept_multiple_files=False,
+        key="master_uploader" # Give it a "vibe" key
+    )
+    
+    if uploaded_master:
+        st.session_state.uploaded_master_file = uploaded_master
+        st.sidebar.success(f"Loaded `{uploaded_master.name}`! Go to the 'Dashboard' tab to see your stats.")
+    # --- END "CLOUD-VIBE" UPLOADER ---
+
 # --- MAIN APP ---
 st.title("Woshi's Tracker App")
 tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
@@ -438,22 +455,7 @@ with tab1:
         # 3. Save the *returned* data right back to the "magic whiteboard"
         st.session_state.processed_data = configured_editor
 
-        # --- "CLOUD-VIBE" UPLOADER ---
-        st.divider()
-        st.subheader("Already have a Master File?")
-        st.write("Upload your `master_spreadsheet.xlsx` here to merge new data or view your dashboard.")
-        
-        uploaded_master = st.file_uploader(
-            "Upload your 'master_spreadsheet.xlsx'", 
-            type="xlsx",
-            accept_multiple_files=False,
-            key="master_uploader" # Give it a "vibe" key
-        )
-        
-        if uploaded_master:
-            st.session_state.uploaded_master_file = uploaded_master
-            st.success(f"Loaded `{uploaded_master.name}`! Go to the 'Dashboard' tab to see your stats.")
-        # --- END "CLOUD-VIBE" UPLOADER ---
+
 
         # --- NEW "CLOUD-VIBE" DOWNLOAD SECTION (FINAL) ---
         st.divider()
