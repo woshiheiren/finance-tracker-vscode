@@ -19,27 +19,36 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS FOR "GRADIENT GLOW" VIBE ---
+# --- CUSTOM CSS FOR "MODERN & CLEAN" VIBE ---
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+/* --- TASK 1: THE FONT --- */
+/* We're importing "Inter", a clean, modern font used by top tech companies. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 /* This targets the main app background */
 .stApp {
     background: radial-gradient(at top left, #1a004f 0%, #0d1117 70%);
-    font-family: 'Space Mono', monospace;
+    /* We apply our new font to *everything* for a consistent feel */
+    font-family: 'Inter', sans-serif;
 }
 
 /* This makes the sidebar match */
-.st-emotion-cache-16txtl3 {
+[data-testid="stSidebar"] {
     background-color: #0d1117;
-    font-family: 'Space Mono', monospace;
+    /* Don't forget to update the sidebar font too! */
+    font-family: 'Inter', sans-serif;
 }
 
 /* This makes the "cards" for our metrics pop */
-.st-emotion-cache-q8sbsg {
+/* This targets the st.container(border=True) */
+[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #161B22;
+    border-radius: 10px; /* Rounded corners for a 'sleek' vibe */
+    border: 1px solid #2a3038; /* A subtle border */
 }
+
+/* --- FUTURE TASKS (like animations) WILL GO HERE --- */
 
 </style>
 """, unsafe_allow_html=True)
