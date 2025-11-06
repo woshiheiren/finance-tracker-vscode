@@ -218,6 +218,30 @@ if 'current_file_data' not in st.session_state:
 if 'uploaded_master_file' not in st.session_state:
     st.session_state.uploaded_master_file = None
 
+def sync_editor_state():
+    """
+    This is our "dumb waiter" (on_change callback).
+    It force-syncs our "manager's clipboard" (processed_data)
+    with our "chef's clipboard" (data_editor).
+    """
+    
+    # 1. Get the "chef's" data
+    editor_data = st.session_state.data_editor
+    
+    # 2. Check the "vibe"
+    if editor_data is not None:
+        # Vibe 1: The "chef" has data (even if it's an empty list!)
+        st.session_state.processed_data = pd.DataFrame.from_records(
+            editor_data,
+            columns=["date", "description", "amount", "Category"]
+        )
+    else:
+        # Vibe 2: The "chef" is confused (state is None).
+        # Force-reset our "manager's clipboard" to an empty, clean table.
+        st.session_state.processed_data = pd.DataFrame(
+            columns=["date", "description", "amount", "Category"]
+        )
+
 
 # --- SIDEBAR ---
 st.sidebar.title("App Settings")
@@ -428,14 +452,10 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
         
-        # --- This is the new, simple, "vibe-approved" editor ---
-    
-        # 1. Read the data from the "magic whiteboard"
-        data_for_editor = st.session_state.processed_data 
-        
-        # 2. Give that data to the "dumb" editor and get back its new state
-        configured_editor = st.data_editor(
-            data_for_editor,  # Use the data we just read
+        # This is the "pro-vibe" editor.
+        # It's "uncontrolled" and uses our "dumb waiter" to sync.
+        st.data_editor(
+            st.session_state.processed_data, # Read from our "manager's clipboard"
             num_rows="dynamic",
             column_config={
                 "Category": st.column_config.SelectboxColumn(
@@ -444,12 +464,10 @@ with tab1:
                     options=st.session_state.categories,
                     required=True
                 )
-            }
-            # Note: NO "key=" and NO "on_change=" !!
+            },
+            key="data_editor", # The "chef's" private clipboard
+            on_change=sync_editor_state # Our "dumb waiter"
         )
-        
-        # 3. Save the *returned* data right back to the "magic whiteboard"
-        st.session_state.processed_data = configured_editor
 
         # --- NEW "CLOUD-VIBE" DOWNLOAD SECTION (FINAL) ---
         st.divider()
