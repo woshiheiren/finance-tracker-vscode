@@ -135,53 +135,66 @@ def process_files_to_dataframe(uploaded_files):
 
 def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     """
-    This is our new "Master Chef" (v2.0).
-    It builds a "RAW_DATA" sheet and uses *real*
-    Excel Pivot Tables to enable the "drill-down" feature.
+    This is our new "Master Chef" (v4.0 - The "Custom Report" Vibe).
+    It builds a *single* tab per month with a "Summary" table
+    on top and a "Detail" table on the bottom.
     """
     output_buffer = BytesIO()
+    excel_data_summary = {} # Will hold our "Summary" pivots
+    excel_data_detail = {} # Will hold our "Detail" raw data
     
     # --- VIBE 1: PREPARE THE "RAW DATA" ---
     df = new_data_df.copy()
     df['Category'] = df['Category'].fillna('Other').replace('', 'Other')
     df['date'] = pd.to_datetime(df['date'])
-    
-    # This is our new "master list" of all transactions
     raw_data = df
     
     # --- VIBE 2: MERGE WITH EXISTING "RAW DATA" (if it exists) ---
     if existing_file_buffer is not None:
         try:
             existing_file_buffer.seek(0)
-            # Try to read the *old* "RAW_DATA" tab
-            old_raw_data = pd.read_excel(existing_file_buffer, sheet_name="RAW_DATA", engine='openpyxl')
-            # If it works, "vibe-merge" them!
-            raw_data = pd.concat([old_raw_data, raw_data], ignore_index=True)
+            # We now have to read *all* tabs, find the "Detail" ones, and merge
+            with pd.ExcelFile(existing_file_buffer, engine='openpyxl') as xls:
+                for sheet in xls.sheet_names:
+                    if "-Data" in sheet: # This is a "Detail" tab
+                        old_detail_data = pd.read_excel(xls, sheet)
+                        raw_data = pd.concat([old_detail_data, raw_data], ignore_index=True)
         except Exception as e:
             st.error(f"Error merging files: {e}. Starting fresh.")
             # If it fails, we just use the new data
     
-    # --- VIBE 3: PREPARE DATA FOR PIVOT ---
-    # We *must* have a real "date" (not "datetime") for the pivot
-    raw_data['date'] = raw_data['date'].dt.date
-    
-    # Create our "Month-Year" sorting column
-    raw_data['tab_name'] = pd.to_datetime(raw_data['date']).dt.strftime('%B %Y')
-    
-    # Get a list of all our unique month-tabs
+    # --- VIBE 3: PREPARE NEW DATA ---
+    raw_data['date_col'] = raw_data['date'].dt.date # A "clean" date column
+    raw_data['tab_name'] = raw_data['date'].dt.strftime('%B %Y')
     tabs_to_create = raw_data['tab_name'].unique()
-    
-    # --- VExample 4: WRITE TO "IN-MEMORY" FILE ---
+
+    # --- VIBE 4: "BUILD" (DON'T "WRITE"!) THE TABLES ---
+    for tab_name in tabs_to_create:
+        
+        # 1. Get *all* data for this month
+        month_data = raw_data[raw_data['tab_name'] == tab_name][['date_col', 'Category', 'description', 'amount', 'File Name']]
+        
+        # 2. "Build" the "Detail" table
+        excel_data_detail[tab_name] = month_data
+        
+        # 3. "Build" the "Summary" (Pivot) table
+        summary_pivot = month_data.pivot_table(
+            index='date_col',
+            columns='Category',
+            values='amount',
+            aggfunc='sum',
+            fill_value=0
+        )
+        excel_data_summary[tab_name] = summary_pivot
+
+    # --- VIBE 5: WRITE THE "CUSTOM REPORT" TO THE FILE ---
     with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
+        
+        # "Vibe-Stamps" (Formats)
         accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
-        
-        # --- A: Write the "BRAIN" (RAW_DATA) tab ---
-        raw_data.to_excel(writer, sheet_name="RAW_DATA", index=False)
-        # Hide the "brain" (this is a "pro-vibe" move)
-        writer.sheets["RAW_DATA"].hide()
-        
-        # --- B: Create the "SMART PIVOT" tabs ---
+        date_format = workbook.add_format({'num_format': 'yyyy-mm-dd', 'align': 'left'})
+        header_format = workbook.add_format({'bold': True, 'font_size': 14, 'font_color': '#00f2c3', 'bg_color': '#161B22'})
         
         # "Vibe-Sort" our tabs (latest month first)
         sorted_month_tabs = sorted(
@@ -191,25 +204,44 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         )
         
         for tab_name in sorted_month_tabs:
-            # Create a new "vibe" sheet
+            # --- Get our "built" data ---
+            summary_data = excel_data_summary[tab_name]
+            detail_data = excel_data_detail[tab_name]
+            
+            # --- Create the "Custom Report" Page ---
             worksheet = workbook.add_worksheet(tab_name)
             
-            # Add the *real* "Smart" Pivot Table!
-            # This "vibe" tells Excel to build a pivot table...
-            pivot_table = worksheet.add_pivot_table('A1', {
-                'data': f'RAW_DATA!$A$1:${get_excel_col(len(raw_data.columns))}${len(raw_data)+1}',
-                'rows': ['date'],
-                'columns': ['Category'],
-                'values': ['amount'],
-                'values_function': 'sum',
-                'values_name': 'Total',
-                'row_filter': {'field': 'tab_name', 'criteria': tab_name},
-                'format': accounting_format
-            })
+            # --- 1. "Print" the "Summary" Table ---
+            worksheet.write('A1', f"{tab_name} - Summary", header_format)
+            summary_data.index.name = "Date"
+            summary_data.to_excel(writer, sheet_name=tab_name, startrow=2) # Start at Row 3 (0-indexed)
             
-            # Set our "vibe" column widths
-            worksheet.set_column(0, 0, 12) # Date column
-            worksheet.set_column(1, len(raw_data['Category'].unique()), 15) # Money columns
+            # --- 2. Calculate our "Vibe-Gap" ---
+            # (Start row of summary + length of summary + 3 "vibe-gap" rows)
+            detail_start_row = 2 + len(summary_data) + 3
+            
+            # --- 3. "Print" the "Detail" Table ---
+            worksheet.write(detail_start_row, 0, "Detailed Transactions", header_format)
+            detail_data.to_excel(writer, sheet_name=tab_name, startrow=detail_start_row + 1, index=False)
+            
+            # --- 4. Format the "Vibe" ---
+            # Format the "Summary" table
+            worksheet.set_column('A:A', 12, date_format) # Date column
+            worksheet.set_column(1, len(summary_data.columns), 15, accounting_format) # Money columns
+            
+            # Format the "Detail" table
+            detail_cols = {
+                'A': 12,  # Date
+                'B': 15,  # Category
+                'C': 40,  # Description
+                'D': 15,  # Amount
+                'E': 25   # File Name
+            }
+            worksheet.set_column('A:A', detail_cols['A'], date_format, {'start_row': detail_start_row + 1})
+            worksheet.set_column('B:B', detail_cols['B'], None, {'start_row': detail_start_row + 1})
+            worksheet.set_column('C:C', detail_cols['C'], None, {'start_row': detail_start_row + 1})
+            worksheet.set_column('D:D', detail_cols['D'], accounting_format, {'start_row': detail_start_row + 1})
+            worksheet.set_column('E:E', detail_cols['E'], None, {'start_row': detail_start_row + 1})
 
     return output_buffer.getvalue()
 
