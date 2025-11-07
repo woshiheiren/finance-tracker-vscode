@@ -19,6 +19,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+st.markdown(
+    """
+    <style>
+    /* Target the sidebar */
+    section[data-testid="stSidebar"] {
+        /* The "frosted glass" effect */
+        backdrop-filter: blur(10px);
+        
+        /* Make the background semi-transparent.
+        You might need to adjust this color to match your dark theme!
+        This is a dark gray with 30% opacity. 
+        */
+        background-color: rgba(40, 40, 40, 0.3);
+        
+        /* A subtle border to define the edge of the glass */
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Optional: Make the sidebar text slightly brighter */
+    section[data-testid="stSidebar"] * {
+        color: #FFFFFF; 
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- CUSTOM CSS FOR "MODERN & CLEAN" VIBE ---
 st.markdown("""
 <style>
@@ -270,6 +297,38 @@ if 'uploaded_master_file' not in st.session_state:
 
 # --- SIDEBAR ---
 st.sidebar.title("App Controls")
+
+st.sidebar.toggle("Enable Light Mode", key="light_mode_toggle")
+if st.session_state.get("light_mode_toggle"):
+    st.markdown(
+    """
+    <style>
+    [data-theme="dark"] {
+        --primary: #3B82F6 !important;
+        --background-color: #FFFFFF !important;
+        --secondary-background-color: #FAFAFA !important;
+        --text-color: #1A1A1A !important;
+        --font: "sans serif" !important;
+
+        /* Also style the sidebar to match */
+        --sidebar-background-color: #FAFAFA !important;
+        --sidebar-text-color: #1A1A1A !important;
+    }
+
+    /* This targets the main app area when in light mode */
+    [data-theme="dark"] .main .block-container {
+        background-color: #FFFFFF !important;
+        color: #1A1A1A !important;
+    }
+
+    /* This targets the sidebar when in light mode */
+    [data-theme="dark"] section[data-testid="stSidebar"] {
+        background-color: #FAFAFA !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # --- VIBE 1: FILE MANAGEMENT (Conditional) ---
 st.sidebar.subheader("📁 File Management")
