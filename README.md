@@ -1,4 +1,4 @@
-# 💰 Woshi's Finance Tracker 💰
+# 💰 Woshi's AI Finance Tracker 💰
 
 **Looking for the Windows guide? [Click here!](README-Windows.md)**
 
@@ -20,7 +20,6 @@ This guide will take you from a **blank Mac computer** to a **fully running app*
     * **Headline News:** Your total spending, top category, and monthly average.
     * **The Spending Pie:** A donut chart of your spending by category.
     * **The Financial Heartbeat:** A bar chart of your spending over time.
-
 ---
 
 ## 🚀 How to Run This App (A Step-by-Step Guide for macOS)
@@ -116,7 +115,7 @@ You are ready. You've done all the setup.
     python -m streamlit run app.py
     ```
 
-Your web browser will automatically open, and your *Finance Tracker** will be running live!
+Your web browser will automatically open, and your **Finance Tracker** will be running live!
 
 ---
 
