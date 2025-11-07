@@ -19,26 +19,125 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS FOR "GRADIENT GLOW" VIBE ---
+st.markdown(
+    """
+    <style>
+    /* Target the sidebar */
+    section[data-testid="stSidebar"] {
+        /* The "frosted glass" effect */
+        backdrop-filter: blur(10px);
+        
+        /* Make the background semi-transparent.
+        You might need to adjust this color to match your dark theme!
+        This is a dark gray with 30% opacity. 
+        */
+        background-color: rgba(40, 40, 40, 0.3);
+        
+        /* A subtle border to define the edge of the glass */
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Optional: Make the sidebar text slightly brighter */
+    section[data-testid="stSidebar"] * {
+        color: #FFFFFF; 
+    }
+
+    /* Target Streamlit's main button element */
+    [data-testid="stButton"] > button {
+        /* This is the secret sauce: makes all changes smooth */
+        transition: transform 0.15s ease-out, background-color 0.15s ease-out;
+        
+        /* Set a default state */
+        transform: scale(1.0);
+    }
+
+    /* This is when the user's mouse is hovering over the button */
+    [data-testid="stButton"] > button:hover {
+        /* Make the button slightly "lift up" */
+        transform: scale(1.03);
+        /* You can also add other effects, like a slight brightness change */
+        filter: brightness(1.1);
+    }
+
+    /* This is when the user is actively clicking the button */
+    [data-testid="stButton"] > button:active {
+        /* Make the button "press down" */
+        transform: scale(0.98);
+        /* Make it look more "pressed" */
+        filter: brightness(0.9);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# --- CUSTOM CSS FOR "MODERN & CLEAN" VIBE ---
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+/* --- 1. THE FONT --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
-/* This targets the main app background */
+/* --- 2. KEYFRAME ANIMATIONS (Our "Flipbooks") --- */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes subtlePulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 242, 195, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 242, 195, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 242, 195, 0); }
+}
+
+/* --- 3. GLOBAL STYLES (The "House") --- */
 .stApp {
     background: radial-gradient(at top left, #1a004f 0%, #0d1117 70%);
-    font-family: 'Space Mono', monospace;
+    font-family: 'Inter', sans-serif;
+    animation: fadeIn 0.8s ease-out;
 }
-
-/* This makes the sidebar match */
-.st-emotion-cache-16txtl3 {
-    background-color: #0d1117;
-    font-family: 'Space Mono', monospace;
-}
-
-/* This makes the "cards" for our metrics pop */
-.st-emotion-cache-q8sbsg {
+[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #161B22;
+    border-radius: 10px;
+    border: 1px solid #2a3038;
+}
+
+/* --- 4. COMPONENT-SPECIFIC STYLES (The "Furniture") --- */
+[data-testid="stButton"] button[kind="primary"] {
+    background-color: #00f2c3;
+    color: #0d1117;
+    border: none;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    animation: subtlePulse 2.5s infinite;
+}
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background-color: #00f2c3;
+    box-shadow: 0 0 15px 5px rgba(0, 242, 195, 0.5);
+    transform: scale(1.03);
+}
+[data-testid="stButton"] button[kind="secondary"] {
+    border-color: #555;
+    color: #fff;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease, color 0.3s ease;
+}
+[data-testid="stButton"] button[kind="secondary"]:hover {
+    border-color: #00f2c3;
+    color: #00f2c3;
+    transform: scale(1.03);
+}
+
+/* --- 5. NEW SIDEBAR STYLES (Idea 2) --- */
+[data-testid="stSidebar"] {
+    background-color: #0d1117;
+    border-right: 1px solid #2a3038;
+    font-family: 'Inter', sans-serif; /* Make sure font matches */
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {
+    background-color: #161B22; /* Our "card" color */
 }
 
 </style>
@@ -222,34 +321,48 @@ if 'uploaded_master_file' not in st.session_state:
 
 
 # --- SIDEBAR ---
-st.sidebar.title("App Settings")
-st.sidebar.subheader("Manage Your Categories")
-categories_input = st.sidebar.text_area(
-    "Enter your categories (one per line):",
-    value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
-    height=250
-)
-st.session_state.categories = [
-    category.strip() for category in categories_input.split('\n') if category.strip()
-]
-st.sidebar.info("Your categories are now saved! The AI and the dropdowns will use this list.")
+st.sidebar.title("App Controls")
 
-# --- "CLOUD-VIBE" UPLOADER ---
+
+
+# --- VIBE 1: FILE MANAGEMENT (Conditional) ---
+st.sidebar.subheader("📁 File Management")
+
+# This is our "Conditional UI" (Idea 3)
+# Only show the uploader if we are on Step 1 (Upload) or Step 4 (Display)
+# When we are in Step 2 (Confirm) or 3 (Processing), it's hidden!
+if st.session_state.app_step in ["1_upload", "4_display"]:
+
+    st.sidebar.write("Upload your master file to merge new data or view your dashboard.")
+    
+    uploaded_master = st.sidebar.file_uploader(
+        "Upload 'master_spreadsheet.xlsx'", 
+        type="xlsx",
+        accept_multiple_files=False,
+        key="master_uploader"
+    )
+    
+    if uploaded_master:
+        st.session_state.uploaded_master_file = uploaded_master
+        st.sidebar.success(f"Loaded `{uploaded_master.name}`!")
+
+else:
+    # When processing, just show a "locked" message
+    st.sidebar.info("Processing new files... File management is disabled.")
+
 st.sidebar.divider()
-st.sidebar.subheader("Already have a Master File?")
-st.sidebar.write("Upload your `master_spreadsheet.xlsx` here to merge new data or view your dashboard.")
 
-uploaded_master = st.sidebar.file_uploader(
-    "Upload your 'master_spreadsheet.xlsx'", 
-    type="xlsx",
-    accept_multiple_files=False,
-    key="master_uploader" # Give it a "vibe" key
-)
-
-if uploaded_master:
-    st.session_state.uploaded_master_file = uploaded_master
-    st.sidebar.success(f"Loaded `{uploaded_master.name}`! Go to the 'Dashboard' tab to see your stats.")
-# --- END "CLOUD-VIBE" UPLOADER ---
+# --- VIBE 2: APP SETTINGS (in an expander) (Idea 1) ---
+with st.sidebar.expander("⚙️ Manage Categories"):
+    categories_input = st.text_area(
+        "Enter your categories (one per line):",
+        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
+        height=250
+    )
+    st.session_state.categories = [
+        category.strip() for category in categories_input.split('\n') if category.strip()
+    ]
+    st.info("Your categories are now saved!")
 
 # --- MAIN APP ---
 st.title("Woshi's Tracker App")

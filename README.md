@@ -1,8 +1,8 @@
-# 💰 Vibe Coder's AI Finance Tracker 💰
+# 💰 Woshi's AI Finance Tracker 💰
 
 **Looking for the Windows guide? [Click here!](README-Windows.md)**
 
-Welcome! This is a "vibe-coded" application that turns your boring PDF bank statements into a powerful, interactive financial dashboard. It uses AI to automatically categorize your spending, lets you edit everything, and saves it all to a master spreadsheet.
+Welcome! This is an application that turns your boring PDF bank statements into a powerful, interactive financial dashboard. It uses AI to automatically categorize your spending, lets you edit everything, and saves it all to a master spreadsheet.
 
 This guide will take you from a **blank Mac computer** to a **fully running app**. No coding knowledge needed!
 
@@ -16,12 +16,10 @@ This guide will take you from a **blank Mac computer** to a **fully running app*
 * **AI-Powered Categorization:** A Google AI (Gemini) automatically reads your transaction descriptions (like "Starbucks") and guesses the category (like "Food").
 * **Fully Editable Preview:** A "mini-Excel" sheet lets you fix any AI mistakes, add/delete rows, and change categories from a dropdown.
 * **Smart Saving:** Automatically saves your clean data to a `master_spreadsheet.xlsx` file on your computer, with a separate tab for each month (e.g., "July 2025").
-* **Live Dashboard:** A beautiful, multi-chart dashboard (with a "Gradient Glow" vibe!) that reads your master spreadsheet and shows you:
+* **Live Dashboard:** A beautiful, multi-chart dashboard that reads your master spreadsheet and shows you:
     * **Headline News:** Your total spending, top category, and monthly average.
     * **The Spending Pie:** A donut chart of your spending by category.
     * **The Financial Heartbeat:** A bar chart of your spending over time.
-* **Custom "Vibe":** A custom-coded dark-mode theme with a "Space Mono" font.
-
 ---
 
 ## 🚀 How to Run This App (A Step-by-Step Guide for macOS)
@@ -117,7 +115,7 @@ You are ready. You've done all the setup.
     python -m streamlit run app.py
     ```
 
-Your web browser will automatically open, and your **Vibe Coder Finance Tracker** will be running live!
+Your web browser will automatically open, and your **Finance Tracker** will be running live!
 
 ---
 
