@@ -544,29 +544,27 @@ with tab1:
     # --- STEP 4: DISPLAY THE EDITOR ---
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
-        
-        # --- This is the new, simple, "vibe-approved" editor ---
-    
-        # 1. Read the data from the "magic whiteboard"
-        data_for_editor = st.session_state.processed_data 
-        
-        # 2. Give that data to the "dumb" editor and get back its new state
-        configured_editor = st.data_editor(
-            data_for_editor,  # Use the data we just read
-            num_rows="dynamic",
-            column_config={
-                "Category": st.column_config.SelectboxColumn(
-                    "Category",
-                    help="Select the transaction category",
-                    options=st.session_state.categories,
-                    required=True
-                )
-            }
-            # Note: NO "key=" and NO "on_change=" !!
+
+# 1. Read the data from the "magic whiteboard"
+data_for_editor = st.session_state.processed_data 
+
+# 2. Give that data to the "dumb" editor and get back its new state
+configured_editor = st.data_editor(
+    data_for_editor,  # Use the data we just read
+    num_rows="dynamic",
+    column_config={
+        "Category": st.column_config.SelectboxColumn(
+            "Category",
+            help="Select the transaction category",
+            options=st.session_state.categories,
+            required=True
         )
-        
-        # 3. Save the *returned* data right back to the "magic whiteboard"
-        st.session_state.processed_data = configured_editor
+    },
+    key="final_editor" # Give it a simple key
+)
+
+# 3. Save the *returned* data right back to the "magic whiteboard"
+st.session_state.processed_data = configured_editor
 
 
 
