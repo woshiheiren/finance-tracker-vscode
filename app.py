@@ -256,6 +256,9 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
             preserved_sheets['Income'] = pd.DataFrame(columns=['Date', 'Income Source', 'Amount', 'Notes'])
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
+    # Clean up categories before merging
+    new_data_df['Category'] = new_data_df['Category'].fillna('Other')
+    new_data_df['Category'] = new_data_df['Category'].replace('', 'Other')
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
