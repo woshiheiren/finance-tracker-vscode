@@ -279,6 +279,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         aggfunc='sum',
         fill_value=0
     )
+    # Invert values to be positive (more intuitive)
+    df_monthly_pivot = df_monthly_pivot * -1
     
     # 3. Add our new Budget columns to this pivot table
     df_monthly_overview = df_monthly_pivot.copy()
@@ -292,7 +294,20 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         
         # --- 1. Write the DATA sheets ---
         df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
+        # Format the Expenses sheet
+        worksheet_ex = writer.sheets['Expenses']
+        worksheet_ex.set_column('A:A', 12) # Date
+        worksheet_ex.set_column('B:B', 40) # Description
+        worksheet_ex.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_ex.set_column('D:D', 20) # Category
+        worksheet_ex.set_column('E:E', 12) # Month
         preserved_sheets['Income'].to_excel(writer, sheet_name='Income', index=False)
+        # Format the Income sheet
+        worksheet_in = writer.sheets['Income']
+        worksheet_in.set_column('A:A', 12) # Date
+        worksheet_in.set_column('B:B', 25) # Income Source
+        worksheet_in.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_in.set_column('D:D', 40) # Notes
         preserved_sheets['Income Dashboard'].to_excel(writer, sheet_name='Income Dashboard', index=False)
         
         # --- 2. Write the OVERVIEW sheet ---
@@ -326,16 +341,16 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         for col_num in range(1, num_data_cols + 1):
             col_letter = xlsxwriter.utility.xl_col_to_name(col_num)
             
-            # 1. Total Actual: =SUM(B2:B13)
+            # 1. Total Actual: =SUM({col_letter}2:{col_letter}{num_data_rows})
             actual_formula = f'=SUM({col_letter}2:{col_letter}{num_data_rows})'
-            worksheet_mo.write(actual_row, col_num, actual_formula)
+            worksheet_mo.write(actual_row, col_num, actual_formula, accounting_format)
             
             # 2. Budget: =0 (our fail-safe)
-            worksheet_mo.write(budget_row, col_num, 0)
+            worksheet_mo.write(budget_row, col_num, 0, accounting_format)
             
             # 3. Difference: =B15-B14 (Budget - Actual)
             diff_formula = f'={col_letter}{budget_row + 1}-{col_letter}{actual_row + 1}'
-            worksheet_mo.write(diff_row, col_num, diff_formula)
+            worksheet_mo.write(diff_row, col_num, diff_formula, accounting_format)
 
         # --- Add new Conditional Formatting ---
         red_format = workbook.add_format({
@@ -359,10 +374,10 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         )
 
         # --- 4. Add formatting for numbers (Vibe Check) ---
-        money_format = workbook.add_format({'num_format': '$#,##0.00'})
+        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
 
         worksheet_mo.set_column(0, 0, 20) # Widen the 'Month' / Summary header column
-        worksheet_mo.set_column(1, num_data_cols, 14, money_format)
+        worksheet_mo.set_column(1, num_data_cols, 18, accounting_format)
 
     # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
     return output_buffer.getvalue() # Return the "in-memory" file
