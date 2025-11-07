@@ -26,90 +26,66 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 /* --- 2. KEYFRAME ANIMATIONS (Our "Flipbooks") --- */
-
-/* The "Fade-In" for the whole page */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
-/* The new "Pulse" for our primary buttons */
 @keyframes subtlePulse {
-  0% {
-    /* Start with no shadow */
-    box-shadow: 0 0 0 0 rgba(0, 242, 195, 0.4);
-  }
-  70% {
-    /* Expand the shadow to 10px, fully transparent */
-    box-shadow: 0 0 0 10px rgba(0, 242, 195, 0);
-  }
-  100% {
-    /* End with no shadow, ready to loop */
-    box-shadow: 0 0 0 0 rgba(0, 242, 195, 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgba(0, 242, 195, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 242, 195, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 242, 195, 0); }
 }
-
 
 /* --- 3. GLOBAL STYLES (The "House") --- */
-
 .stApp {
     background: radial-gradient(at top left, #1a004f 0%, #0d1117 70%);
     font-family: 'Inter', sans-serif;
     animation: fadeIn 0.8s ease-out;
 }
-
-[data-testid="stSidebar"] {
-    background-color: #0d1117;
-    font-family: 'Inter', sans-serif;
-}
-
 [data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #161B22;
     border-radius: 10px;
     border: 1px solid #2a3038;
 }
 
-
 /* --- 4. COMPONENT-SPECIFIC STYLES (The "Furniture") --- */
-
-/* This targets Streamlit's "primary" buttons */
 [data-testid="stButton"] button[kind="primary"] {
-    background-color: #00f2c3; /* Our "vibe" color */
-    color: #0d1117; /* Dark text for contrast */
+    background-color: #00f2c3;
+    color: #0d1117;
     border: none;
-    border-radius: 8px; /* Slightly rounded */
-    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; /* Smooth transitions */
-    
-    /* Apply our new subtle pulse animation, looping forever */
+    border-radius: 8px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
     animation: subtlePulse 2.5s infinite;
 }
-
-/* This is the "glow" on hover for primary buttons */
 [data-testid="stButton"] button[kind="primary"]:hover {
-    background-color: #00f2c3; /* Keep the color */
-    box-shadow: 0 0 15px 5px rgba(0, 242, 195, 0.5); /* The "Glow" */
-    transform: scale(1.03); /* Slight "pop" */
+    background-color: #00f2c3;
+    box-shadow: 0 0 15px 5px rgba(0, 242, 195, 0.5);
+    transform: scale(1.03);
 }
-
-/* This targets the "secondary" buttons (like "Stop AI", "Skip") */
 [data-testid="stButton"] button[kind="secondary"] {
-    border-color: #555; /* A subtle border */
-    color: #fff; /* White text */
+    border-color: #555;
+    color: #fff;
     border-radius: 8px;
     transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease, color 0.3s ease;
 }
-
-/* This is the "glow" on hover for secondary buttons */
 [data-testid="stButton"] button[kind="secondary"]:hover {
-    border-color: #00f2c3; /* Glow the border with our vibe color */
-    color: #00f2c3; /* Glow the text with our vibe color */
-    transform: scale(1.03); /* Slight "pop" */
+    border-color: #00f2c3;
+    color: #00f2c3;
+    transform: scale(1.03);
+}
+
+/* --- 5. NEW SIDEBAR STYLES (Idea 2) --- */
+[data-testid="stSidebar"] {
+    background-color: #0d1117;
+    border-right: 1px solid #2a3038;
+    font-family: 'Inter', sans-serif; /* Make sure font matches */
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {
+    background-color: #161B22; /* Our "card" color */
 }
 
 </style>
@@ -293,34 +269,46 @@ if 'uploaded_master_file' not in st.session_state:
 
 
 # --- SIDEBAR ---
-st.sidebar.title("App Settings")
-st.sidebar.subheader("Manage Your Categories")
-categories_input = st.sidebar.text_area(
-    "Enter your categories (one per line):",
-    value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
-    height=250
-)
-st.session_state.categories = [
-    category.strip() for category in categories_input.split('\n') if category.strip()
-]
-st.sidebar.info("Your categories are now saved! The AI and the dropdowns will use this list.")
+st.sidebar.title("App Controls")
 
-# --- "CLOUD-VIBE" UPLOADER ---
+# --- VIBE 1: FILE MANAGEMENT (Conditional) ---
+st.sidebar.subheader("📁 File Management")
+
+# This is our "Conditional UI" (Idea 3)
+# Only show the uploader if we are on Step 1 (Upload) or Step 4 (Display)
+# When we are in Step 2 (Confirm) or 3 (Processing), it's hidden!
+if st.session_state.app_step in ["1_upload", "4_display"]:
+
+    st.sidebar.write("Upload your master file to merge new data or view your dashboard.")
+    
+    uploaded_master = st.sidebar.file_uploader(
+        "Upload 'master_spreadsheet.xlsx'", 
+        type="xlsx",
+        accept_multiple_files=False,
+        key="master_uploader"
+    )
+    
+    if uploaded_master:
+        st.session_state.uploaded_master_file = uploaded_master
+        st.sidebar.success(f"Loaded `{uploaded_master.name}`!")
+
+else:
+    # When processing, just show a "locked" message
+    st.sidebar.info("Processing new files... File management is disabled.")
+
 st.sidebar.divider()
-st.sidebar.subheader("Already have a Master File?")
-st.sidebar.write("Upload your `master_spreadsheet.xlsx` here to merge new data or view your dashboard.")
 
-uploaded_master = st.sidebar.file_uploader(
-    "Upload your 'master_spreadsheet.xlsx'", 
-    type="xlsx",
-    accept_multiple_files=False,
-    key="master_uploader" # Give it a "vibe" key
-)
-
-if uploaded_master:
-    st.session_state.uploaded_master_file = uploaded_master
-    st.sidebar.success(f"Loaded `{uploaded_master.name}`! Go to the 'Dashboard' tab to see your stats.")
-# --- END "CLOUD-VIBE" UPLOADER ---
+# --- VIBE 2: APP SETTINGS (in an expander) (Idea 1) ---
+with st.sidebar.expander("⚙️ Manage Categories"):
+    categories_input = st.text_area(
+        "Enter your categories (one per line):",
+        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
+        height=250
+    )
+    st.session_state.categories = [
+        category.strip() for category in categories_input.split('\n') if category.strip()
+    ]
+    st.info("Your categories are now saved!")
 
 # --- MAIN APP ---
 st.title("Woshi's Tracker App")
