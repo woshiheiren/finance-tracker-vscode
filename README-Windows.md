@@ -1,6 +1,6 @@
-# 🚀 Vibe Coder's AI Finance Tracker (Windows Guide) 🚀
+# 🚀 Woshi's Finance Tracker (Windows Guide) 🚀
 
-Welcome! This is a "vibe-coded" application that turns your boring PDF bank statements into a powerful, interactive financial dashboard.
+Welcome! This is an application that turns your boring PDF bank statements into a powerful, interactive financial dashboard.
 
 This guide will take you from a **blank Windows computer** to a **fully running app**. No coding knowledge needed!
 
