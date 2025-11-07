@@ -544,15 +544,14 @@ with tab1:
     # --- STEP 4: DISPLAY THE EDITOR ---
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
-        
-        # --- This is the new, simple, "vibe-approved" editor ---
-    
-        # 1. Read the data from the "magic whiteboard"
-        data_for_editor = st.session_state.processed_data 
-        
-        # 2. Give that data to the "dumb" editor and get back its new state
+
+        # 1. READ (The "Security Guard" takes a snapshot)
+        # We *must* make a copy for our "before" snapshot
+        data_from_state = st.session_state.processed_data.copy()
+
+        # 2. RENDER (Show the editor)
         configured_editor = st.data_editor(
-            data_for_editor,  # Use the data we just read
+            data_from_state, # Pass in the snapshot
             num_rows="dynamic",
             column_config={
                 "Category": st.column_config.SelectboxColumn(
@@ -561,12 +560,19 @@ with tab1:
                     options=st.session_state.categories,
                     required=True
                 )
-            }
-            # Note: NO "key=" and NO "on_change=" !!
+            },
+            key="final_editor" # Keep the key to anchor the widget
         )
-        
-        # 3. Save the *returned* data right back to the "magic whiteboard"
+
+        # 3. WRITE (Save the "after" snapshot to the Magic Whiteboard)
         st.session_state.processed_data = configured_editor
+
+        # 4. COMPARE & REFRESH (The "Security Guard" part)
+        # Use pandas .equals() to see if *any* data changed.
+        if not data_from_state.equals(configured_editor):
+            # If the data is different (an edit was made)...
+            # ...force a refresh, just like the user suggested!
+            st.rerun()
 
 
 
