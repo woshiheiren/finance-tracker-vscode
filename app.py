@@ -280,6 +280,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         fill_value=0
     )
     df_monthly_pivot = df_monthly_pivot * -1 # Invert values
+    # Convert the sorted date index to the "pretty" string format
+    df_monthly_pivot.index = df_monthly_pivot.index.strftime('%B %Y')
     
     # 3. Add our new Budget columns to this pivot table
     df_monthly_overview = df_monthly_pivot.copy()
@@ -293,7 +295,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         
         # --- DEFINE ALL FORMATS FIRST ---
         accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
-        month_year_format = workbook.add_format({'num_format': 'mmmm yyyy', 'bold': True})
+        bold_format = workbook.add_format({'bold': True})
         
         # Format for "Total Actual" row
         total_actual_header_format = workbook.add_format({'bold': True, 'bg_color': '#EEEEEE'})
@@ -428,7 +430,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         # --- 4. Add formatting for numbers (Vibe Check) ---
         # accounting_format is already defined at the top of the with block
 
-        worksheet_mo.set_column(0, 0, 20, month_year_format) # Widen the 'Month' / Summary header column
+        worksheet_mo.set_column(0, 0, 20, bold_format) # Widen the 'Month' / Summary header column
         worksheet_mo.set_column(1, num_data_cols, 18, accounting_format)
 
     # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
