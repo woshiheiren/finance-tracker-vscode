@@ -222,71 +222,122 @@ def process_files_to_dataframe(uploaded_files):
         return pd.concat(all_data, ignore_index=True)
     return None
 
+# --- NEW MASTER "CHEF" FUNCTION (v1.4.0) ---
 def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     """
-    This is our new "Master Chef" converter.
-    - If 'existing_file_buffer' is None, it creates a new file.
-    - If 'existing_file_buffer' is provided, it merges the data.
+    This is the new v1.4.0 "Master Chef" converter.
+    - It creates a master "Expenses" sheet (raw data).
+    - It creates/preserves "Income" sheets for manual entry.
+    - It creates "Overview" sheets with budget calculations.
     """
     output_buffer = BytesIO()
-    excel_data = {} # This will hold all our sheets
+    
+    preserved_sheets = {
+        'Income': pd.DataFrame(columns=['Date', 'Income Source', 'Amount', 'Notes']),
+        'Income Dashboard': pd.DataFrame()
+    }
+    df_expenses_master = pd.DataFrame()
 
-    # --- VIBE 1: MERGE WITH EXISTING FILE ---
+    # --- VIBE 1: MERGE (If user uploaded a file) ---
     if existing_file_buffer is not None:
         try:
-            # We must "reset" the buffer so pandas can read it
             existing_file_buffer.seek(0)
             with pd.ExcelFile(existing_file_buffer, engine='openpyxl') as xls:
-                # Load *all* old data
-                excel_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names}
+                if 'Income' in xls.sheet_names:
+                    preserved_sheets['Income'] = pd.read_excel(xls, 'Income')
+                if 'Income Dashboard' in xls.sheet_names:
+                    preserved_sheets['Income Dashboard'] = pd.read_excel(xls, 'Income Dashboard')
+                if 'Expenses' in xls.sheet_names:
+                    df_expenses_master = pd.read_excel(xls, 'Expenses')
         except Exception as e:
             st.error(f"Error reading uploaded master file: {e}")
-            excel_data = {} # Start fresh if file is corrupt
-    
-    # --- VIBE 2: PREPARE NEW DATA ---
-    if 'Dashboard' not in excel_data:
-         excel_data['Dashboard'] = pd.DataFrame() # Ensure Dashboard exists
-    
-    df = new_data_df.copy()
-    df['Category'] = df['Category'].fillna('Other').replace('', 'Other')
-    df['date'] = pd.to_datetime(df['date'])
-    df['tab_name'] = df['date'].dt.strftime('%B %Y')
-    tabs_to_update = df['tab_name'].unique()
+            # Start fresh if file is corrupt
+            df_expenses_master = pd.DataFrame()
+            preserved_sheets['Income'] = pd.DataFrame(columns=['Date', 'Income Source', 'Amount', 'Notes'])
 
-    # --- VIBE 3: MERGE/ADD NEW DATA ---
-    for tab_name in tabs_to_update:
-        new_data_for_tab = df[df['tab_name'] == tab_name]
-        new_pivot = new_data_for_tab.pivot_table(
-            index='date',
-            columns='Category',
-            values='amount',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        if tab_name in excel_data:
-            # Merge Vibe: Add new data to old data
-            old_pivot = excel_data[tab_name]
-            combined_pivot = old_pivot.add(new_pivot, fill_value=0)
-            excel_data[tab_name] = combined_pivot
-        else:
-            # New Tab Vibe: Just add the new data
-            excel_data[tab_name] = new_pivot
+    # --- VIBE 2: COMBINE & SORT EXPENSES ---
+    df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
+    df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
+    df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
+    
+    # Drop duplicates
+    df_expenses_master.drop_duplicates(subset=['date', 'description', 'amount'], keep='last', inplace=True)
+
+    # --- VIBE 3: BUILD THE OVERVIEW SHEETS ---
+    
+    # 1. Create the 'Month' column (e.g., "2025-11") for pivoting
+    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.to_period('M')
+    
+    # 2. Create the pivot table for "Actual" spend
+    df_monthly_pivot = df_expenses_master.pivot_table(
+        index='Category',
+        columns='Month',
+        values='amount',
+        aggfunc='sum',
+        fill_value=0
+    )
+    
+    # 3. Add our new Budget columns to this pivot table
+    df_monthly_overview = df_monthly_pivot.copy()
+    
+    # Add 'Total Actual' (sum of all month columns)
+    df_monthly_overview['Total Actual'] = df_monthly_overview.sum(axis=1)
+    
+    # Add 'Budget' (fail-safe as 0)
+    df_monthly_overview['Budget'] = 0
+    
+    # Add 'Difference' (Budget - Total Actual)
+    df_monthly_overview['Difference'] = df_monthly_overview['Budget'] - df_monthly_overview['Total Actual']
+
+    # (We will add Weekly, Daily, etc. in a later task)
 
     # --- VIBE 4: WRITE TO "IN-MEMORY" FILE ---
     with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
-        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
         
-        for sheet_name, sheet_data in excel_data.items():
-            if isinstance(sheet_data.index, pd.DatetimeIndex):
-                sheet_data.index = sheet_data.index.date
-            sheet_data.to_excel(writer, sheet_name=sheet_name)
-            worksheet = writer.sheets[sheet_name]
-    
-            worksheet.set_column(0, 0, 12) # Date column
-            worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format) # Money columns
+        # --- 1. Write the DATA sheets ---
+        df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
+        preserved_sheets['Income'].to_excel(writer, sheet_name='Income', index=False)
+        preserved_sheets['Income Dashboard'].to_excel(writer, sheet_name='Income Dashboard', index=False)
+        
+        # --- 2. Write the OVERVIEW sheet ---
+        df_monthly_overview.to_excel(writer, sheet_name='Monthly Overview')
+        worksheet_mo = writer.sheets['Monthly Overview']
+        
+        # --- 3. Add Conditional Formatting (The "Over Budget" Vibe) ---
+        
+        # Create the "over budget" format
+        red_format = workbook.add_format({
+            'bg_color': '#FFC7CE',   # Light red fill
+            'font_color': '#9C0006' # Dark red text
+        })
+        
+        # Find the column letter for "Difference"
+        # It's the last column we added
+        diff_col_letter = xlsxwriter.utility.xl_col_to_name(len(df_monthly_overview.columns))
+        
+        # Apply the format to the whole "Difference" column (e.g., 'E2:E100')
+        # Format "If cell value < 0, apply red_format"
+        # (Difference = Budget - Actual, so "over budget" is < 0)
+        worksheet_mo.conditional_format(
+            f'{diff_col_letter}2:{diff_col_letter}100', # Range
+            {
+                'type': 'cell',
+                'criteria': '<',
+                'value': 0,
+                'format': red_format
+            }
+        )
+        
+        # --- 4. Add formatting for numbers (Vibe Check) ---
+        money_format = workbook.add_format({'num_format': '$#,##0.00'})
+        
+        # Format all columns except the first one ('Category')
+        # This formats all the monthly data, Total Actual, Budget, and Difference
+        worksheet_mo.set_column(1, len(df_monthly_overview.columns), 14, money_format)
+        worksheet_mo.set_column(0, 0, 20) # Widen the 'Category' column
 
+    # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
     return output_buffer.getvalue() # Return the "in-memory" file
 
 # --- SESSION STATE ---
