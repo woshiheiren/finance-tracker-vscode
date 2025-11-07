@@ -222,71 +222,225 @@ def process_files_to_dataframe(uploaded_files):
         return pd.concat(all_data, ignore_index=True)
     return None
 
+# --- NEW MASTER "CHEF" FUNCTION (v1.4.0) ---
 def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     """
-    This is our new "Master Chef" converter.
-    - If 'existing_file_buffer' is None, it creates a new file.
-    - If 'existing_file_buffer' is provided, it merges the data.
+    This is the new v1.4.0 "Master Chef" converter.
+    - It creates a master "Expenses" sheet (raw data).
+    - It creates/preserves "Income" sheets for manual entry.
+    - It creates "Overview" sheets with budget calculations.
     """
     output_buffer = BytesIO()
-    excel_data = {} # This will hold all our sheets
+    
+    preserved_sheets = {
+        'Income': pd.DataFrame(columns=['Date', 'Income Source', 'Amount', 'Notes']),
+        'Income Dashboard': pd.DataFrame()
+    }
+    df_expenses_master = pd.DataFrame()
 
-    # --- VIBE 1: MERGE WITH EXISTING FILE ---
+    # --- VIBE 1: MERGE (If user uploaded a file) ---
     if existing_file_buffer is not None:
         try:
-            # We must "reset" the buffer so pandas can read it
             existing_file_buffer.seek(0)
             with pd.ExcelFile(existing_file_buffer, engine='openpyxl') as xls:
-                # Load *all* old data
-                excel_data = {sheet: pd.read_excel(xls, sheet, index_col=0) for sheet in xls.sheet_names}
+                if 'Income' in xls.sheet_names:
+                    preserved_sheets['Income'] = pd.read_excel(xls, 'Income')
+                if 'Income Dashboard' in xls.sheet_names:
+                    preserved_sheets['Income Dashboard'] = pd.read_excel(xls, 'Income Dashboard')
+                if 'Expenses' in xls.sheet_names:
+                    df_expenses_master = pd.read_excel(xls, 'Expenses')
         except Exception as e:
             st.error(f"Error reading uploaded master file: {e}")
-            excel_data = {} # Start fresh if file is corrupt
-    
-    # --- VIBE 2: PREPARE NEW DATA ---
-    if 'Dashboard' not in excel_data:
-         excel_data['Dashboard'] = pd.DataFrame() # Ensure Dashboard exists
-    
-    df = new_data_df.copy()
-    df['Category'] = df['Category'].fillna('Other').replace('', 'Other')
-    df['date'] = pd.to_datetime(df['date'])
-    df['tab_name'] = df['date'].dt.strftime('%B %Y')
-    tabs_to_update = df['tab_name'].unique()
+            # Start fresh if file is corrupt
+            df_expenses_master = pd.DataFrame()
+            preserved_sheets['Income'] = pd.DataFrame(columns=['Date', 'Income Source', 'Amount', 'Notes'])
 
-    # --- VIBE 3: MERGE/ADD NEW DATA ---
-    for tab_name in tabs_to_update:
-        new_data_for_tab = df[df['tab_name'] == tab_name]
-        new_pivot = new_data_for_tab.pivot_table(
-            index='date',
-            columns='Category',
-            values='amount',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        if tab_name in excel_data:
-            # Merge Vibe: Add new data to old data
-            old_pivot = excel_data[tab_name]
-            combined_pivot = old_pivot.add(new_pivot, fill_value=0)
-            excel_data[tab_name] = combined_pivot
-        else:
-            # New Tab Vibe: Just add the new data
-            excel_data[tab_name] = new_pivot
+    # --- VIBE 2: COMBINE & SORT EXPENSES ---
+    # Clean up categories before merging
+    new_data_df['Category'] = new_data_df['Category'].fillna('Other')
+    new_data_df['Category'] = new_data_df['Category'].replace('', 'Other')
+    df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
+    df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
+    df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
+    
+    # Drop duplicates
+    df_expenses_master.drop_duplicates(subset=['date', 'description', 'amount'], keep='last', inplace=True)
+
+    # --- VIBE 3: BUILD THE OVERVIEW SHEETS ---
+    
+    # 1. Create the 'Month' column (e.g., "2025-11") for pivoting
+    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.to_period('M').dt.to_timestamp()
+    
+    # 2. Create the pivot table for "Actual" spend
+    df_monthly_pivot = df_expenses_master.pivot_table(
+        index='Month',
+        columns='Category',
+        values='amount',
+        aggfunc='sum',
+        fill_value=0
+    )
+    df_monthly_pivot = df_monthly_pivot * -1 # Invert values
+    # Convert the sorted date index to the "pretty" string format
+    df_monthly_pivot.index = df_monthly_pivot.index.strftime('%B %Y')
+    
+    # 3. Add our new Budget columns to this pivot table
+    df_monthly_overview = df_monthly_pivot.copy()
+
+
+    # (We will add Weekly, Daily, etc. in a later task)
 
     # --- VIBE 4: WRITE TO "IN-MEMORY" FILE ---
     with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
-        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
         
-        for sheet_name, sheet_data in excel_data.items():
-            if isinstance(sheet_data.index, pd.DatetimeIndex):
-                sheet_data.index = sheet_data.index.date
-            sheet_data.to_excel(writer, sheet_name=sheet_name)
-            worksheet = writer.sheets[sheet_name]
-    
-            worksheet.set_column(0, 0, 12) # Date column
-            worksheet.set_column(1, len(sheet_data.columns), 15, accounting_format) # Money columns
+        # --- DEFINE ALL FORMATS FIRST ---
+        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
+        bold_format = workbook.add_format({'bold': True})
+        
+        # Format for "Total Actual" row
+        total_actual_header_format = workbook.add_format({'bold': True, 'bg_color': '#EEEEEE'})
+        total_actual_format = workbook.add_format({
+            'bold': True, 'bg_color': '#EEEEEE',
+            'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+        })
+        
+        # Format for "Budget" row
+        budget_header_format = workbook.add_format({'bold': True, 'bg_color': '#E8F5E9'})
+        budget_format = workbook.add_format({
+            'bg_color': '#E8F5E9',
+            'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+        })
+        
+        # --- 1. Write the sheets in the new, correct order ---
+        # (This order defines the tabs from left to right)
+        
+        # Write Overview sheet FIRST
+        df_monthly_overview.to_excel(writer, sheet_name='Monthly Overview')
+        
+        # Write preserved manual sheets
+        preserved_sheets['Income Dashboard'].to_excel(writer, sheet_name='Income Dashboard', index=False)
+        preserved_sheets['Income'].to_excel(writer, sheet_name='Income', index=False)
+        
+        # Write Expenses sheet LAST
+        df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
 
+        # --- 2. Add Formatting & Final Touches ---
+        
+        # --- Monthly Overview Formatting ---
+        worksheet_mo = writer.sheets['Monthly Overview']
+        
+        # --- 4. Color the Monthly Overview Headers ---
+        
+        # Define our pastel colors
+        pastel_colors = [
+            '#E0F7FA', '#E8F5E9', '#FFFDE7', '#FCE4EC',
+            '#F3E5F5', '#E8EAF6', '#E3F2FD', '#E0F2F1'
+        ]
+        
+        # Get the category column headers (e.g., ['Food', 'Transport', ...])
+        # We start from column 1 (B)
+        category_headers = df_monthly_overview.columns
+        
+        for col_num, category_name in enumerate(category_headers, start=1):
+            # Pick a color from our list (and "wrap around" if we run out)
+            color = pastel_colors[col_num % len(pastel_colors)]
+            
+            # Create a new format for this header
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': color,
+                'border': 1
+            })
+            
+            # Write the header back onto the sheet with the new format
+            worksheet_mo.write(0, col_num, category_name, header_format)
+
+        # --- Expenses Sheet Formatting ---
+        worksheet_ex = writer.sheets['Expenses']
+        date_format = workbook.add_format({'num_format': 'dd-mm-yyyy'})
+        worksheet_ex.set_column('A:A', 12, date_format) # Date
+        worksheet_ex.set_column('B:B', 40) # Description
+        worksheet_ex.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_ex.set_column('D:D', 20) # Category
+        worksheet_ex.set_column('E:E', 12) # Month
+        
+        # Get the dimensions of the data
+        (num_rows, num_cols) = df_expenses_master.shape
+        
+        # Apply the autofilter
+        # This creates the filter dropdowns on all headers (from A1 to E1)
+        worksheet_ex.autofilter(0, 0, num_rows, num_cols - 1)
+        
+        # --- Income Sheet Formatting ---
+        worksheet_in = writer.sheets['Income']
+        worksheet_in.set_column('A:A', 12) # Date
+        worksheet_in.set_column('B:B', 25) # Income Source
+        worksheet_in.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_in.set_column('D:D', 40) # Notes
+        
+        # --- Add Summary Rows (The new logic) ---
+        # Get the number of rows of data (e.g., 12 months) + 1 for the header
+        num_data_rows = len(df_monthly_overview) + 1
+        # Get the number of columns of data (e.g., 5 categories)
+        num_data_cols = len(df_monthly_overview.columns)
+        
+        # Add a blank spacer row
+        spacer_row = num_data_rows + 1
+        
+        # Define summary row numbers
+        actual_row = spacer_row + 1
+        budget_row = actual_row + 1
+        
+        # --- Write Summary Row Headers ---
+        worksheet_mo.write(actual_row, 0, 'Total Actual', total_actual_header_format)
+        worksheet_mo.write(budget_row, 0, 'Budget', budget_header_format)
+        
+        # --- Write Summary Row Formulas (for each category column) ---
+        # Loop from the 2nd column (index 1) to the end
+        for col_num in range(1, num_data_cols + 1):
+            col_letter = xlsxwriter.utility.xl_col_to_name(col_num)
+            
+            # 1. Total Actual: =SUM({col_letter}2:{col_letter}{num_data_rows})
+            actual_formula = f'=SUM({col_letter}2:{col_letter}{num_data_rows})'
+            worksheet_mo.write(actual_row, col_num, actual_formula, total_actual_format)
+            
+            # 2. Budget: =0 (our fail-safe)
+            worksheet_mo.write(budget_row, col_num, 0, budget_format)
+
+        # --- Add NEW Conditional Formatting (Per-Cell) ---
+        red_format = workbook.add_format({
+            'bg_color': '#FFC7CE',   # Light red fill
+        })
+        
+        # Get the range of the main data (e.g., 'B2:F13')
+        start_col_letter = xlsxwriter.utility.xl_col_to_name(1)
+        end_col_letter = xlsxwriter.utility.xl_col_to_name(num_data_cols)
+        data_range = f'{start_col_letter}2:{end_col_letter}{num_data_rows}'
+        
+        # Get the *first* cell of the budget row (e.g., 'B15')
+        # The $ locks the row, so B2 compares to B$15, C2 compares to C$15
+        # (budget_row is the variable from our existing code)
+        budget_cell_locked = f'{start_col_letter}${budget_row + 1}'
+        
+        # Apply the format: "Highlight if cell value > its column's budget"
+        worksheet_mo.conditional_format(data_range,
+            {
+                'type': 'formula',
+                # The criteria is '=B2>B$15'
+                # Excel will automatically adjust 'B2' for each cell in the range,
+                # but 'B$15' will "lock" to the correct budget row.
+                'criteria': f'={start_col_letter}2>{budget_cell_locked}',
+                'format': red_format
+            }
+        )
+
+        # --- 4. Add formatting for numbers (Vibe Check) ---
+        # accounting_format is already defined at the top of the with block
+
+        worksheet_mo.set_column(0, 0, 20, bold_format) # Widen the 'Month' / Summary header column
+        worksheet_mo.set_column(1, num_data_cols, 18, accounting_format)
+
+    # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
     return output_buffer.getvalue() # Return the "in-memory" file
 
 # --- SESSION STATE ---
@@ -636,56 +790,61 @@ with tab1:
 with tab2:
     st.subheader("My Financial Dashboard")
     
-    # --- NEW "CLOUD-VIBE" LOGIC (No "Bouncer") ---
+    # --- NEW v1.4.0 "CLOUD-VIBE" LOGIC ---
     if st.session_state.uploaded_master_file is None:
         st.info("Upload your 'master_spreadsheet.xlsx' in the 'Data Processing' tab to see your dashboard.")
         all_data = pd.DataFrame() 
-        sheet_names = []
 
     else:
-        # We have a file! Let's *try* to read it.
+        # We have a file! Let's *try* to read *only* the 'Expenses' sheet.
         uploaded_file = st.session_state.uploaded_master_file
         uploaded_file.seek(0) # Reset buffer
         
         try:
             st.success(f"Dashboard loaded from `{uploaded_file.name}`!")
-            # Load all data from the *uploaded file*
-            with pd.ExcelFile(uploaded_file, engine='openpyxl') as xls:
-                sheet_names = [s for s in xls.sheet_names if s not in ['Dashboard', '.vibe-check']]
+            # Load *only* the 'Expenses' sheet for our dashboard data
+            all_data = pd.read_excel(uploaded_file, sheet_name="Expenses", engine='openpyxl')
             
-            if not sheet_names:
-                st.info("Your master file doesn't have any monthly data yet.")
-                all_data = pd.DataFrame()
-            else:
-                uploaded_file.seek(0)
-                all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
-                all_data = pd.concat(all_data_list)
-                all_data.fillna(0, inplace=True)
-                all_data = all_data * -1 # Apply our "Net Spend" vibe
+            # Ensure 'amount' is numeric, just in case
+            all_data['amount'] = pd.to_numeric(all_data['amount'], errors='coerce')
+            all_data.dropna(subset=['amount'], inplace=True)
+            
+            # Ensure 'date' is datetime
+            all_data['date'] = pd.to_datetime(all_data['date'])
 
         except Exception as e:
-            st.error(f"Error reading `{uploaded_file.name}`: {e}")
-            st.info("The file might be corrupt, not an Excel file, or not a valid master file.")
+            st.error(f"Error reading `Expenses` sheet from `{uploaded_file.name}`: {e}")
+            st.info("The file might be corrupt, or the 'Expenses' sheet may be missing.")
             all_data = pd.DataFrame()
-            sheet_names = []
 
-    # --- ALL OUR "VIBE" CHARTS ---
+    # --- ALL OUR "VIBE" CHARTS (Now powered by 'Expenses' sheet) ---
     if not all_data.empty:
-        # (All our chart logic... it's all the same!)
-        # --- 1. CALCULATE METRICS ---
-        total_spent = all_data.values.sum()
-        category_totals = all_data.sum(axis=0)
+        
+        # --- 1. CALCULATE METRICS (The *Correct* Way) ---
+        
+        # This is the fix: Only sum the 'amount' column!
+        total_spent = all_data['amount'].sum() 
+        
+        # Multiply by -1 to show positive spending
+        total_spent_positive = total_spent * -1 
+        
+        # Group by Category, sum *only* the 'amount'
+        category_totals = all_data.groupby('Category')['amount'].sum() * -1
+        
         top_category = category_totals.idxmax()
         top_category_value = category_totals.max()
-        num_months = len(sheet_names)
-        avg_per_month = total_spent / num_months if num_months > 0 else 0
+        
+        # Get date range for "avg per month"
+        num_months = (all_data['date'].max() - all_data['date'].min()).days / 30.44
+        num_months = max(1, num_months) # Avoid division by zero
+        avg_per_month = total_spent_positive / num_months
 
         # --- 2. DISPLAY "HEADLINE NEWS" METRICS ---
         st.header("Headline News")
         col1, col2, col3 = st.columns(3)
         with col1:
             with st.container(border=True):
-                st.metric("Total Recorded Spend", f"${total_spent:,.2f}")
+                st.metric("Total Recorded Spend", f"${total_spent_positive:,.2f}")
         with col2:
             with st.container(border=True):
                 st.metric(f"Top Category: {top_category}", f"${top_category_value:,.2f}")
@@ -698,7 +857,7 @@ with tab2:
         st.header("The Spending Pie")
         colA, colB = st.columns(2)
         with colA:
-            pie_data = category_totals.reset_index(name='Total').rename(columns={'index': 'Category'})
+            pie_data = category_totals.reset_index(name='Total')
             donut_chart = alt.Chart(pie_data).mark_arc(outerRadius=120, innerRadius=80).encode(
                 theta=alt.Theta("Total:Q", stack=True), 
                 color=alt.Color("Category:N"),
@@ -712,17 +871,16 @@ with tab2:
             st.header("The Financial Heartbeat")
             st.write("Your total spending, month by month.")
             
-            uploaded_file.seek(0)
-            all_data_list = [pd.read_excel(uploaded_file, sheet_name=sheet, index_col=0, engine='openpyxl') for sheet in sheet_names]
+            # Resample the raw data by month
+            monthly_totals = all_data.set_index('date')['amount'].resample('M').sum() * -1
+            heartbeat_data = pd.DataFrame(monthly_totals)
+            heartbeat_data.index.name = 'Month'
             
-            monthly_totals_list = [sheet.values.sum() * -1 for sheet in all_data_list]
-            heartbeat_data = pd.DataFrame({'Month': sheet_names, 'Total Spend': monthly_totals_list})
-            heartbeat_data = heartbeat_data.set_index('Month')
             st.bar_chart(heartbeat_data, use_container_width=True, color="#00f2c3")
     else:
         if st.session_state.uploaded_master_file is not None:
             # This catches the case where the file was *bad*
-            st.warning("Could not read any data from the uploaded file.")
+            st.warning("Could not read any 'Expenses' data from the uploaded file.")
         else:
             # This is the normal "empty" state
             st.info("Your dashboard is empty.")
