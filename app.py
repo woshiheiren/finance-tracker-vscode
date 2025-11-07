@@ -298,37 +298,7 @@ if 'uploaded_master_file' not in st.session_state:
 # --- SIDEBAR ---
 st.sidebar.title("App Controls")
 
-st.sidebar.toggle("Enable Light Mode", key="light_mode_toggle")
-if st.session_state.get("light_mode_toggle"):
-    st.markdown(
-    """
-    <style>
-    [data-theme="dark"] {
-        --primary: #3B82F6 !important;
-        --background-color: #FFFFFF !important;
-        --secondary-background-color: #FAFAFA !important;
-        --text-color: #1A1A1A !important;
-        --font: "sans serif" !important;
 
-        /* Also style the sidebar to match */
-        --sidebar-background-color: #FAFAFA !important;
-        --sidebar-text-color: #1A1A1A !important;
-    }
-
-    /* This targets the main app area when in light mode */
-    [data-theme="dark"] .main .block-container {
-        background-color: #FFFFFF !important;
-        color: #1A1A1A !important;
-    }
-
-    /* This targets the sidebar when in light mode */
-    [data-theme="dark"] section[data-testid="stSidebar"] {
-        background-color: #FAFAFA !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 # --- VIBE 1: FILE MANAGEMENT (Conditional) ---
 st.sidebar.subheader("📁 File Management")
