@@ -269,7 +269,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     # --- VIBE 3: BUILD THE OVERVIEW SHEETS ---
     
     # 1. Create the 'Month' column (e.g., "2025-11") for pivoting
-    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.strftime('%B %Y')
+    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.to_period('M').dt.to_timestamp()
     
     # 2. Create the pivot table for "Actual" spend
     df_monthly_pivot = df_expenses_master.pivot_table(
@@ -293,6 +293,21 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         
         # --- DEFINE ALL FORMATS FIRST ---
         accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
+        month_year_format = workbook.add_format({'num_format': 'mmmm yyyy', 'bold': True})
+        
+        # Format for "Total Actual" row
+        total_actual_header_format = workbook.add_format({'bold': True, 'bg_color': '#EEEEEE'})
+        total_actual_format = workbook.add_format({
+            'bold': True, 'bg_color': '#EEEEEE',
+            'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+        })
+        
+        # Format for "Budget" row
+        budget_header_format = workbook.add_format({'bold': True, 'bg_color': '#E8F5E9'})
+        budget_format = workbook.add_format({
+            'bg_color': '#E8F5E9',
+            'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+        })
         
         # --- 1. Write the sheets in the new, correct order ---
         # (This order defines the tabs from left to right)
@@ -368,9 +383,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         budget_row = actual_row + 1
         
         # --- Write Summary Row Headers ---
-        bold_format = workbook.add_format({'bold': True})
-        worksheet_mo.write(actual_row, 0, 'Total Actual', bold_format)
-        worksheet_mo.write(budget_row, 0, 'Budget', bold_format)
+        worksheet_mo.write(actual_row, 0, 'Total Actual', total_actual_header_format)
+        worksheet_mo.write(budget_row, 0, 'Budget', budget_header_format)
         
         # --- Write Summary Row Formulas (for each category column) ---
         # Loop from the 2nd column (index 1) to the end
@@ -379,15 +393,14 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
             
             # 1. Total Actual: =SUM({col_letter}2:{col_letter}{num_data_rows})
             actual_formula = f'=SUM({col_letter}2:{col_letter}{num_data_rows})'
-            worksheet_mo.write(actual_row, col_num, actual_formula, accounting_format)
+            worksheet_mo.write(actual_row, col_num, actual_formula, total_actual_format)
             
             # 2. Budget: =0 (our fail-safe)
-            worksheet_mo.write(budget_row, col_num, 0, accounting_format)
+            worksheet_mo.write(budget_row, col_num, 0, budget_format)
 
         # --- Add NEW Conditional Formatting (Per-Cell) ---
         red_format = workbook.add_format({
             'bg_color': '#FFC7CE',   # Light red fill
-            'font_color': '#9C0006' # Dark red text
         })
         
         # Get the range of the main data (e.g., 'B2:F13')
@@ -415,7 +428,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         # --- 4. Add formatting for numbers (Vibe Check) ---
         # accounting_format is already defined at the top of the with block
 
-        worksheet_mo.set_column(0, 0, 20) # Widen the 'Month' / Summary header column
+        worksheet_mo.set_column(0, 0, 20, month_year_format) # Widen the 'Month' / Summary header column
         worksheet_mo.set_column(1, num_data_cols, 18, accounting_format)
 
     # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
