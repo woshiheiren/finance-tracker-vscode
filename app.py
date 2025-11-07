@@ -41,6 +41,31 @@ st.markdown(
     section[data-testid="stSidebar"] * {
         color: #FFFFFF; 
     }
+
+    /* Target Streamlit's main button element */
+    [data-testid="stButton"] > button {
+        /* This is the secret sauce: makes all changes smooth */
+        transition: transform 0.15s ease-out, background-color 0.15s ease-out;
+        
+        /* Set a default state */
+        transform: scale(1.0);
+    }
+
+    /* This is when the user's mouse is hovering over the button */
+    [data-testid="stButton"] > button:hover {
+        /* Make the button slightly "lift up" */
+        transform: scale(1.03);
+        /* You can also add other effects, like a slight brightness change */
+        filter: brightness(1.1);
+    }
+
+    /* This is when the user is actively clicking the button */
+    [data-testid="stButton"] > button:active {
+        /* Make the button "press down" */
+        transform: scale(0.98);
+        /* Make it look more "pressed" */
+        filter: brightness(0.9);
+    }
     </style>
     """,
     unsafe_allow_html=True
