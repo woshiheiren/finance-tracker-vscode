@@ -292,6 +292,9 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
         
+        # --- DEFINE ALL FORMATS FIRST ---
+        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
+        
         # --- 1. Write the DATA sheets ---
         df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
         # Format the Expenses sheet
@@ -315,7 +318,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         
         # --- Add Summary Rows (The new logic) ---
         worksheet_mo = writer.sheets['Monthly Overview']
-        workbook = writer.book
+        # workbook = writer.book # workbook is already defined at the top of the with block
 
         # Get the number of rows of data (e.g., 12 months) + 1 for the header
         num_data_rows = len(df_monthly_overview) + 1
@@ -374,7 +377,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         )
 
         # --- 4. Add formatting for numbers (Vibe Check) ---
-        accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
+        # accounting_format is already defined at the top of the with block
 
         worksheet_mo.set_column(0, 0, 20) # Widen the 'Month' / Summary header column
         worksheet_mo.set_column(1, num_data_cols, 18, accounting_format)
