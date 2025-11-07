@@ -279,10 +279,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         aggfunc='sum',
         fill_value=0
     )
-    # Invert values to be positive (more intuitive)
-    df_monthly_pivot = df_monthly_pivot * -1
-    # Invert values to be positive (more intuitive)
-    df_monthly_pivot = df_monthly_pivot * -1
+    df_monthly_pivot = df_monthly_pivot * -1 # Invert values
     
     # 3. Add our new Budget columns to this pivot table
     df_monthly_overview = df_monthly_pivot.copy()
@@ -297,44 +294,67 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         # --- DEFINE ALL FORMATS FIRST ---
         accounting_format = workbook.add_format({'num_format': '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'})
         
-        # --- 1. Write the DATA sheets ---
-        df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
-        # Format the Expenses sheet
-        worksheet_ex = writer.sheets['Expenses']
-        worksheet_ex.set_column('A:A', 12) # Date
-        worksheet_ex.set_column('B:B', 40) # Description
-        worksheet_ex.set_column('C:C', 18, accounting_format) # Amount
-        worksheet_ex.set_column('D:D', 20) # Category
-        worksheet_ex.set_column('E:E', 12) # Month
-        # Format the Expenses sheet
-        worksheet_ex = writer.sheets['Expenses']
-        worksheet_ex.set_column('A:A', 12) # Date
-        worksheet_ex.set_column('B:B', 40) # Description
-        worksheet_ex.set_column('C:C', 18, accounting_format) # Amount
-        worksheet_ex.set_column('D:D', 20) # Category
-        worksheet_ex.set_column('E:E', 12) # Month
-        preserved_sheets['Income'].to_excel(writer, sheet_name='Income', index=False)
-        # Format the Income sheet
-        worksheet_in = writer.sheets['Income']
-        worksheet_in.set_column('A:A', 12) # Date
-        worksheet_in.set_column('B:B', 25) # Income Source
-        worksheet_in.set_column('C:C', 18, accounting_format) # Amount
-        worksheet_in.set_column('D:D', 40) # Notes
-        # Format the Income sheet
-        worksheet_in = writer.sheets['Income']
-        worksheet_in.set_column('A:A', 12) # Date
-        worksheet_in.set_column('B:B', 25) # Income Source
-        worksheet_in.set_column('C:C', 18, accounting_format) # Amount
-        worksheet_in.set_column('D:D', 40) # Notes
-        preserved_sheets['Income Dashboard'].to_excel(writer, sheet_name='Income Dashboard', index=False)
+        # --- 1. Write the sheets in the new, correct order ---
+        # (This order defines the tabs from left to right)
         
-        # --- 2. Write the OVERVIEW sheet ---
+        # Write Overview sheet FIRST
         df_monthly_overview.to_excel(writer, sheet_name='Monthly Overview')
         
-        # --- Add Summary Rows (The new logic) ---
-        worksheet_mo = writer.sheets['Monthly Overview']
-        # workbook = writer.book # workbook is already defined at the top of the with block
+        # Write preserved manual sheets
+        preserved_sheets['Income Dashboard'].to_excel(writer, sheet_name='Income Dashboard', index=False)
+        preserved_sheets['Income'].to_excel(writer, sheet_name='Income', index=False)
+        
+        # Write Expenses sheet LAST
+        df_expenses_master.to_excel(writer, sheet_name='Expenses', index=False)
 
+        # --- 2. Add Formatting & Final Touches ---
+        
+        # --- Monthly Overview Formatting ---
+        worksheet_mo = writer.sheets['Monthly Overview']
+        
+        # --- 4. Color the Monthly Overview Headers ---
+        
+        # Define our pastel colors
+        pastel_colors = [
+            '#E0F7FA', '#E8F5E9', '#FFFDE7', '#FCE4EC',
+            '#F3E5F5', '#E8EAF6', '#E3F2FD', '#E0F2F1'
+        ]
+        
+        # Get the category column headers (e.g., ['Food', 'Transport', ...])
+        # We start from column 1 (B)
+        category_headers = df_monthly_overview.columns
+        
+        for col_num, category_name in enumerate(category_headers, start=1):
+            # Pick a color from our list (and "wrap around" if we run out)
+            color = pastel_colors[col_num % len(pastel_colors)]
+            
+            # Create a new format for this header
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': color,
+                'border': 1
+            })
+            
+            # Write the header back onto the sheet with the new format
+            worksheet_mo.write(0, col_num, category_name, header_format)
+
+        # --- Expenses Sheet Formatting ---
+        worksheet_ex = writer.sheets['Expenses']
+        date_format = workbook.add_format({'num_format': 'dd-mm-yyyy'})
+        worksheet_ex.set_column('A:A', 12, date_format) # Date
+        worksheet_ex.set_column('B:B', 40) # Description
+        worksheet_ex.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_ex.set_column('D:D', 20) # Category
+        worksheet_ex.set_column('E:E', 12) # Month
+        
+        # --- Income Sheet Formatting ---
+        worksheet_in = writer.sheets['Income']
+        worksheet_in.set_column('A:A', 12) # Date
+        worksheet_in.set_column('B:B', 25) # Income Source
+        worksheet_in.set_column('C:C', 18, accounting_format) # Amount
+        worksheet_in.set_column('D:D', 40) # Notes
+        
+        # --- Add Summary Rows (The new logic) ---
         # Get the number of rows of data (e.g., 12 months) + 1 for the header
         num_data_rows = len(df_monthly_overview) + 1
         # Get the number of columns of data (e.g., 5 categories)
