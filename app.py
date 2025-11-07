@@ -266,12 +266,12 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     # --- VIBE 3: BUILD THE OVERVIEW SHEETS ---
     
     # 1. Create the 'Month' column (e.g., "2025-11") for pivoting
-    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.to_period('M')
+    df_expenses_master['Month'] = pd.to_datetime(df_expenses_master['date']).dt.strftime('%B %Y')
     
     # 2. Create the pivot table for "Actual" spend
     df_monthly_pivot = df_expenses_master.pivot_table(
-        index='Category',
-        columns='Month',
+        index='Month',
+        columns='Category',
         values='amount',
         aggfunc='sum',
         fill_value=0
@@ -279,15 +279,7 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     
     # 3. Add our new Budget columns to this pivot table
     df_monthly_overview = df_monthly_pivot.copy()
-    
-    # Add 'Total Actual' (sum of all month columns)
-    df_monthly_overview['Total Actual'] = df_monthly_overview.sum(axis=1)
-    
-    # Add 'Budget' (fail-safe as 0)
-    df_monthly_overview['Budget'] = 0
-    
-    # Add 'Difference' (Budget - Total Actual)
-    df_monthly_overview['Difference'] = df_monthly_overview['Budget'] - df_monthly_overview['Total Actual']
+
 
     # (We will add Weekly, Daily, etc. in a later task)
 
@@ -302,25 +294,59 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         
         # --- 2. Write the OVERVIEW sheet ---
         df_monthly_overview.to_excel(writer, sheet_name='Monthly Overview')
+        
+        # --- Add Summary Rows (The new logic) ---
         worksheet_mo = writer.sheets['Monthly Overview']
+        workbook = writer.book
+
+        # Get the number of rows of data (e.g., 12 months) + 1 for the header
+        num_data_rows = len(df_monthly_overview) + 1
+        # Get the number of columns of data (e.g., 5 categories)
+        num_data_cols = len(df_monthly_overview.columns)
         
-        # --- 3. Add Conditional Formatting (The "Over Budget" Vibe) ---
+        # Add a blank spacer row
+        spacer_row = num_data_rows + 1
         
-        # Create the "over budget" format
+        # Define summary row numbers
+        actual_row = spacer_row + 1
+        budget_row = actual_row + 1
+        diff_row = budget_row + 1
+        
+        # --- Write Summary Row Headers ---
+        bold_format = workbook.add_format({'bold': True})
+        worksheet_mo.write(actual_row, 0, 'Total Actual', bold_format)
+        worksheet_mo.write(budget_row, 0, 'Budget', bold_format)
+        worksheet_mo.write(diff_row, 0, 'Difference', bold_format)
+        
+        # --- Write Summary Row Formulas (for each category column) ---
+        # Loop from the 2nd column (index 1) to the end
+        for col_num in range(1, num_data_cols + 1):
+            col_letter = xlsxwriter.utility.xl_col_to_name(col_num)
+            
+            # 1. Total Actual: =SUM(B2:B13)
+            actual_formula = f'=SUM({col_letter}2:{col_letter}{num_data_rows})'
+            worksheet_mo.write(actual_row, col_num, actual_formula)
+            
+            # 2. Budget: =0 (our fail-safe)
+            worksheet_mo.write(budget_row, col_num, 0)
+            
+            # 3. Difference: =B15-B14 (Budget - Actual)
+            diff_formula = f'={col_letter}{budget_row + 1}-{col_letter}{actual_row + 1}'
+            worksheet_mo.write(diff_row, col_num, diff_formula)
+
+        # --- Add new Conditional Formatting ---
         red_format = workbook.add_format({
             'bg_color': '#FFC7CE',   # Light red fill
             'font_color': '#9C0006' # Dark red text
         })
         
-        # Find the column letter for "Difference"
-        # It's the last column we added
-        diff_col_letter = xlsxwriter.utility.xl_col_to_name(len(df_monthly_overview.columns))
+        # Get the start and end column letters (e.g., 'B' and 'F')
+        start_col_letter = xlsxwriter.utility.xl_col_to_name(1)
+        end_col_letter = xlsxwriter.utility.xl_col_to_name(num_data_cols)
         
-        # Apply the format to the whole "Difference" column (e.g., 'E2:E100')
-        # Format "If cell value < 0, apply red_format"
-        # (Difference = Budget - Actual, so "over budget" is < 0)
+        # Apply format to the "Difference" row (e.g., 'B16:F16')
         worksheet_mo.conditional_format(
-            f'{diff_col_letter}2:{diff_col_letter}100', # Range
+            f'{start_col_letter}{diff_row + 1}:{end_col_letter}{diff_row + 1}', # Range
             {
                 'type': 'cell',
                 'criteria': '<',
@@ -328,14 +354,12 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
                 'format': red_format
             }
         )
-        
+
         # --- 4. Add formatting for numbers (Vibe Check) ---
         money_format = workbook.add_format({'num_format': '$#,##0.00'})
-        
-        # Format all columns except the first one ('Category')
-        # This formats all the monthly data, Total Actual, Budget, and Difference
-        worksheet_mo.set_column(1, len(df_monthly_overview.columns), 14, money_format)
-        worksheet_mo.set_column(0, 0, 20) # Widen the 'Category' column
+
+        worksheet_mo.set_column(0, 0, 20) # Widen the 'Month' / Summary header column
+        worksheet_mo.set_column(1, num_data_cols, 14, money_format)
 
     # --- VIBE 5: RETURN THE "IN-MEMORY" FILE ---
     return output_buffer.getvalue() # Return the "in-memory" file
