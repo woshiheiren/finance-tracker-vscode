@@ -364,6 +364,13 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
         worksheet_ex.set_column('D:D', 20) # Category
         worksheet_ex.set_column('E:E', 12) # Month
         
+        # Get the dimensions of the data
+        (num_rows, num_cols) = df_expenses_master.shape
+        
+        # Apply the autofilter
+        # This creates the filter dropdowns on all headers (from A1 to E1)
+        worksheet_ex.autofilter(0, 0, num_rows, num_cols - 1)
+        
         # --- Income Sheet Formatting ---
         worksheet_in = writer.sheets['Income']
         worksheet_in.set_column('A:A', 12) # Date
