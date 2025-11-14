@@ -699,34 +699,35 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
-        # 1. READ (The "Security Guard" takes a snapshot)
-        # We *must* make a copy for our "before" snapshot
-        data_from_state = st.session_state.processed_data.copy()
+# --- 1. THE "BLANK STRING" FIX ---
+# THIS IS THE NEW, CRITICAL FIX:
+# We create a *new* list for the editor that includes "" (a blank string).
+# This makes "blank" a legal, selectable option.
+editor_options = [""] + st.session_state.categories
 
-        # 2. RENDER (Show the editor)
-        configured_editor = st.data_editor(
-            data_from_state, # Pass in the snapshot
-            num_rows="dynamic",
-            column_config={
-                "Category": st.column_config.SelectboxColumn(
-                    "Category",
-                    help="Select the transaction category",
-                    options=st.session_state.categories,
-                    required=True
-                )
-            },
-            key="final_editor" # Keep the key to anchor the widget
+# We also make sure any "None" values (if they exist)
+# are converted to "", so the data matches the options.
+data_for_editor = st.session_state.processed_data.copy()
+data_for_editor['Category'] = data_for_editor['Category'].fillna("")
+
+
+# --- 2. THE "SIMPLE LOOP" FIX ---
+# This part is correct. We just point it at our new options list.
+configured_editor = st.data_editor(
+    data_for_editor,
+    num_rows="dynamic",
+    column_config={
+        "Category": st.column_config.SelectboxColumn(
+            "Category",
+            help="Select the transaction category",
+            options=editor_options # <-- Use the new list
         )
+    },
+    key="final_editor"
+)
 
-        # 3. WRITE (Save the "after" snapshot to the Magic Whiteboard)
-        st.session_state.processed_data = configured_editor
-
-        # 4. COMPARE & REFRESH (The "Security Guard" part)
-        # Use pandas .equals() to see if *any* data changed.
-        if not data_from_state.equals(configured_editor):
-            # If the data is different (an edit was made)...
-            # ...force a refresh, just like the user suggested!
-            st.rerun()
+# This is the simplest, most stable "save" pattern.
+st.session_state.processed_data = configured_editor
 
 
 
