@@ -197,10 +197,10 @@ def get_ai_category(description, categories_list):
         if ai_guess in categories_list:
             return ai_guess
         else:
-            return "Other" # A safe fallback
+            return None
     except Exception as e:
         st.error(f"AI processing failed for: {description}. Error: {e}")
-        return "Other" # Return "Other" on failure
+        return None
 
 def process_files_to_dataframe(uploaded_files):
     all_data = []
@@ -510,7 +510,7 @@ st.sidebar.divider()
 with st.sidebar.expander("⚙️ Manage Categories"):
     categories_input = st.text_area(
         "Enter your categories (one per line):",
-        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
+        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nNone",
         height=250
     )
     st.session_state.categories = [
