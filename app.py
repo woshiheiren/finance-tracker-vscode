@@ -699,35 +699,35 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
-# --- 1. THE "BLANK STRING" FIX ---
-# THIS IS THE NEW, CRITICAL FIX:
-# We create a *new* list for the editor that includes "" (a blank string).
-# This makes "blank" a legal, selectable option.
-editor_options = [""] + st.session_state.categories
+        # --- 1. THE "BLANK STRING" FIX ---
+        # THIS IS THE NEW, CRITICAL FIX:
+        # We create a *new* list for the editor that includes "" (a blank string).
+        # This makes "blank" a legal, selectable option.
+        editor_options = [""] + st.session_state.categories
 
-# We also make sure any "None" values (if they exist)
-# are converted to "", so the data matches the options.
-data_for_editor = st.session_state.processed_data.copy()
-data_for_editor['Category'] = data_for_editor['Category'].fillna("")
+        # We also make sure any "None" values (if they exist)
+        # are converted to "", so the data matches the options.
+        data_for_editor = st.session_state.processed_data.copy()
+        data_for_editor['Category'] = data_for_editor['Category'].fillna("")
 
 
-# --- 2. THE "SIMPLE LOOP" FIX ---
-# This part is correct. We just point it at our new options list.
-configured_editor = st.data_editor(
-    data_for_editor,
-    num_rows="dynamic",
-    column_config={
-        "Category": st.column_config.SelectboxColumn(
-            "Category",
-            help="Select the transaction category",
-            options=editor_options # <-- Use the new list
+        # --- 2. THE "SIMPLE LOOP" FIX ---
+        # This part is correct. We just point it at our new options list.
+        configured_editor = st.data_editor(
+            data_for_editor,
+            num_rows="dynamic",
+            column_config={
+                "Category": st.column_config.SelectboxColumn(
+                    "Category",
+                    help="Select the transaction category",
+                    options=editor_options # <-- Use the new list
+                )
+            },
+            key="final_editor"
         )
-    },
-    key="final_editor"
-)
 
-# This is the simplest, most stable "save" pattern.
-st.session_state.processed_data = configured_editor
+        # This is the simplest, most stable "save" pattern.
+        st.session_state.processed_data = configured_editor
 
 
 
