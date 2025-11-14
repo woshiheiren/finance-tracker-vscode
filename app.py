@@ -519,7 +519,7 @@ with st.sidebar.expander("⚙️ Manage Categories"):
     st.info("Your categories are now saved!")
 
 # --- MAIN APP ---
-st.title("Woshi's Tracker App")
+st.title("Woshi's Tracker App - bugfix")
 tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
 
 with tab1:
