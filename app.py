@@ -700,34 +700,40 @@ with tab1:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
         # --- 1. THE "BLANK STRING" FIX ---
-        # THIS IS THE NEW, CRITICAL FIX:
-        # We create a *new* list for the editor that includes "" (a blank string).
-        # This makes "blank" a legal, selectable option.
+        # (This fixes the "Other" auto-fill bug)
         editor_options = [""] + st.session_state.categories
-
-        # We also make sure any "None" values (if they exist)
-        # are converted to "", so the data matches the options.
         data_for_editor = st.session_state.processed_data.copy()
         data_for_editor['Category'] = data_for_editor['Category'].fillna("")
 
 
-        # --- 2. THE "SIMPLE LOOP" FIX ---
-        # This part is correct. We just point it at our new options list.
-        configured_editor = st.data_editor(
-            data_for_editor,
-            num_rows="dynamic",
-            column_config={
-                "Category": st.column_config.SelectboxColumn(
-                    "Category",
-                    help="Select the transaction category",
-                    options=editor_options # <-- Use the new list
-                )
-            },
-            key="final_editor"
-        )
+        # --- 2. THE "SAVE BUTTON" (st.form) FIX ---
+        # (This fixes the "scroll-jump" and "auto-fill" bugs)
+        # We wrap the editor in a form, so it only reruns
+        # when the "Save" button is clicked.
 
-        # This is the simplest, most stable "save" pattern.
-        st.session_state.processed_data = configured_editor
+        with st.form(key="editor_form"):
+            configured_editor = st.data_editor(
+                data_for_editor,
+                num_rows="dynamic",
+                column_config={
+                    "Category": st.column_config.SelectboxColumn(
+                        "Category",
+                        help="Select the transaction category",
+                        options=editor_options # <-- Use the new list
+                    )
+                }
+                # We do NOT need a key="final_editor" here
+            )
+
+            # This is our new "Save" button
+            submitted = st.form_submit_button("Save Changes")
+
+        # --- 3. THE NEW "SAVE" LOGIC ---
+        # We only save to session state *if* the button was clicked.
+        if submitted:
+            st.session_state.processed_data = configured_editor
+            st.success("Changes saved!") # Give the user some feedback
+            st.rerun()
 
 
 
