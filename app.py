@@ -257,9 +257,12 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
     # Clean up categories before merging
-    # Use .where() to replace NaNs with None (fillna(None) crashes)
-    new_data_df['Category'] = new_data_df['Category'].astype(object).where(new_data_df['Category'].notnull(), None)
-    new_data_df['Category'] = new_data_df['Category'].replace('', None)
+    # FIX: Use the `where` pattern to safely convert BOTH blank strings ("")
+    # and NaN/Float values (Ghost Grey) into real `None` objects (White).
+    new_data_df['Category'] = new_data_df['Category'].astype(object).where(
+        new_data_df['Category'].notnull() & (new_data_df['Category'] != ""),
+        None
+    )
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
@@ -711,7 +714,13 @@ with tab1:
         # We convert all blank strings ("") to None.
         # This is the robust "blank" value.
         data_for_editor = st.session_state.processed_data.copy()
-        data_for_editor['Category'] = data_for_editor['Category'].replace("", None)
+    
+        # FIX: Use the `where` pattern to safely convert BOTH blank strings ("")
+        # and NaN/Float values (Ghost Grey) into real `None` objects (White).
+        data_for_editor['Category'] = data_for_editor['Category'].astype(object).where(
+            data_for_editor['Category'].notnull() & (data_for_editor['Category'] != ""), 
+            None
+        )
 
 
         # --- 2. THE "NONE" FIX (Part B) ---
