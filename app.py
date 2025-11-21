@@ -796,22 +796,21 @@ with tab1:
                 # If no file, show a "disabled" vibe
                 st.button("Merge with Uploaded Master", disabled=True, help="Please upload a 'master_spreadsheet.xlsx' to enable merging.")
 
-        if st.button("Process New Files"):
-             # Clear the file uploader
-            st.session_state["pdf_uploader"] = []
-             # Reset everything
+        # --- Reset Function (Callback) ---
+        def reset_app_state():
+            """Clears all session state variables to start fresh."""
             st.session_state.processed_data = None
             st.session_state.app_step = "1_upload"
             st.session_state.stop_ai = False
-            
-            # --- ADD THESE RESETS ---
             st.session_state.all_processed_data = []
             st.session_state.file_progress_index = 0
             st.session_state.row_progress_index = 0
             st.session_state.current_file_data = None
-            # --- END OF RESETS ---
-            
-            st.rerun()
+            # This is now safe because it runs inside the callback
+            st.session_state["pdf_uploader"] = []
+
+        # --- Button with Callback ---
+        st.button("Process New Files", on_click=reset_app_state)
 
 with tab2:
     st.subheader("My Financial Dashboard")
