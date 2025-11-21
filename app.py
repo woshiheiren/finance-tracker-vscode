@@ -528,7 +528,7 @@ tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
 
 with tab1:
     st.write("Welcome to my app! Let's get those finances organized.")
-    uploaded_files = st.file_uploader("Upload your PDF bank statements here:", accept_multiple_files=True, type="pdf")
+    uploaded_files = st.file_uploader("Upload your PDF bank statements here:", accept_multiple_files=True, type="pdf", key="pdf_uploader")
 
 
 
@@ -797,6 +797,8 @@ with tab1:
                 st.button("Merge with Uploaded Master", disabled=True, help="Please upload a 'master_spreadsheet.xlsx' to enable merging.")
 
         if st.button("Process New Files"):
+             # Clear the file uploader
+            st.session_state["pdf_uploader"] = []
              # Reset everything
             st.session_state.processed_data = None
             st.session_state.app_step = "1_upload"
