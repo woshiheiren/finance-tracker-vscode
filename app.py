@@ -807,7 +807,7 @@ with tab1:
             st.session_state.row_progress_index = 0
             st.session_state.current_file_data = None
             # This is now safe because it runs inside the callback
-            st.session_state["pdf_uploader"] = []
+            st.session_state["pdf_uploader"] = None # Use None to trigger the reset
 
         # --- Button with Callback ---
         st.button("Process New Files", on_click=reset_app_state)
