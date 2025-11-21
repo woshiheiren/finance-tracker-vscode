@@ -193,14 +193,14 @@ def get_ai_category(description, categories_list):
         # Clean the AI's response (remove extra spaces/newlines)
         ai_guess = response.text.strip()
         
-        # Final check: if the AI's guess isn't in our list, default to None
+        # Final check: if the AI's guess isn't in our list, default to "None"
         if ai_guess in categories_list:
             return ai_guess
         else:
-            return None
+            return "None"
     except Exception as e:
         st.error(f"AI processing failed for: {description}. Error: {e}")
-        return None
+        return "None"
 
 def process_files_to_dataframe(uploaded_files):
     all_data = []
@@ -257,12 +257,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
     # Clean up categories before merging
-    # FIX: Use the `where` pattern to safely convert BOTH blank strings ("")
-    # and NaN/Float values (Ghost Grey) into real `None` objects (White).
-    new_data_df['Category'] = new_data_df['Category'].astype(object).where(
-        new_data_df['Category'].notnull() & (new_data_df['Category'] != ""),
-        None
-    )
+    # FIX: Ensure everything is String "None" before saving/pivoting
+    new_data_df['Category'] = new_data_df['Category'].fillna("None").replace("", "None")
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
@@ -647,7 +643,7 @@ with tab1:
                     # If so, fill any remaining blank categories with "None"
                     # as requested.
                     current_data = st.session_state.current_file_data
-                    current_data['Category'] = current_data['Category'].replace("", None)
+                    current_data['Category'] = current_data['Category'].replace("", "None")
                     st.session_state.current_file_data = current_data
                 st.session_state.all_processed_data.append(st.session_state.current_file_data)
                 st.session_state.file_progress_index = current_file_index + 1
@@ -696,7 +692,7 @@ with tab1:
                 st.success("Files processed! Skipping AI categorization.")
                 columns_to_keep = ['date', 'description', 'amount']
                 preview_data = data[columns_to_keep].copy()
-                preview_data['Category'] = None # Leave category blank as requested
+                preview_data['Category'] = "None" # Leave category blank as requested
                 
                 st.session_state.processed_data = preview_data
                 st.session_state.app_step = "4_display"
@@ -710,23 +706,17 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
-        # --- 1. THE "NONE" FIX (Part A) ---
-        # We convert all blank strings ("") to None.
-        # This is the robust "blank" value.
+        # FIX: Convert ALL blanks/NaNs/Nones to the String "None"
         data_for_editor = st.session_state.processed_data.copy()
-    
-        # FIX: Use the `where` pattern to safely convert BOTH blank strings ("")
-        # and NaN/Float values (Ghost Grey) into real `None` objects (White).
-        data_for_editor['Category'] = data_for_editor['Category'].astype(object).where(
-            data_for_editor['Category'].notnull() & (data_for_editor['Category'] != ""), 
-            None
-        )
+        data_for_editor['Category'] = data_for_editor['Category'].fillna("None").replace("", "None")
 
 
         # --- 2. THE "NONE" FIX (Part B) ---
-        # We create a new list for the editor that includes `None`.
-        # This makes "blank" a legal, selectable option.
-        editor_options = [None] + st.session_state.categories
+        # Add String "None" to options (ensure no duplicates if it's in sidebar)
+        if "None" not in st.session_state.categories:
+             editor_options = ["None"] + st.session_state.categories
+        else:
+             editor_options = st.session_state.categories
 
 
         # --- 3. THE "SAVE BUTTON" (st.form) FIX ---
