@@ -829,6 +829,11 @@ with tab2:
             # Load *only* the 'Expenses' sheet for our dashboard data
             all_data = pd.read_excel(uploaded_file, sheet_name="Expenses", engine='openpyxl')
             
+            # FIX: The Dashboard crashes if categories are NaN/Blank.
+            # We force ALL categories to be strings. If they are NaN, they become "None".
+            all_data['Category'] = all_data['Category'].fillna("None").astype(str)
+            all_data['Category'] = all_data['Category'].replace("", "None")
+            
             # Ensure 'amount' is numeric, just in case
             all_data['amount'] = pd.to_numeric(all_data['amount'], errors='coerce')
             all_data.dropna(subset=['amount'], inplace=True)
