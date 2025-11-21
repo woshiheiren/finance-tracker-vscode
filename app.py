@@ -260,6 +260,10 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
     # FIX: Ensure everything is String "None" before saving/pivoting
     new_data_df['Category'] = new_data_df['Category'].fillna("None").replace("", "None")
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
+
+    # FIX: Scrub the ENTIRE combined dataset (Old + New).
+    # Convert any NaNs, Nones, or blank strings to the String "None".
+    df_expenses_master['Category'] = df_expenses_master['Category'].fillna("None").replace("", "None")
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
     
