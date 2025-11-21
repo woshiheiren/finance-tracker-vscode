@@ -193,14 +193,14 @@ def get_ai_category(description, categories_list):
         # Clean the AI's response (remove extra spaces/newlines)
         ai_guess = response.text.strip()
         
-        # Final check: if the AI's guess isn't in our list, default to "Other"
+        # Final check: if the AI's guess isn't in our list, default to "None"
         if ai_guess in categories_list:
             return ai_guess
         else:
-            return "Other" # A safe fallback
+            return "None"
     except Exception as e:
         st.error(f"AI processing failed for: {description}. Error: {e}")
-        return "Other" # Return "Other" on failure
+        return "None"
 
 def process_files_to_dataframe(uploaded_files):
     all_data = []
@@ -257,9 +257,13 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
     # Clean up categories before merging
-    new_data_df['Category'] = new_data_df['Category'].fillna('Other')
-    new_data_df['Category'] = new_data_df['Category'].replace('', 'Other')
+    # FIX: Ensure everything is String "None" before saving/pivoting
+    new_data_df['Category'] = new_data_df['Category'].fillna("None").replace("", "None")
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
+
+    # FIX: Scrub the ENTIRE combined dataset (Old + New).
+    # Convert any NaNs, Nones, or blank strings to the String "None".
+    df_expenses_master['Category'] = df_expenses_master['Category'].fillna("None").replace("", "None")
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
     
@@ -510,7 +514,7 @@ st.sidebar.divider()
 with st.sidebar.expander("⚙️ Manage Categories"):
     categories_input = st.text_area(
         "Enter your categories (one per line):",
-        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nOther",
+        value="Food\nTransport\nRent\nUtilities\nSubscriptions\nEntertainment\nNone",
         height=250
     )
     st.session_state.categories = [
@@ -638,6 +642,13 @@ with tab1:
                     st.session_state.row_progress_index = preview_data.index.get_loc(index) + 1
 
                 # --- 3. After the *inner* loop (file is done or stopped) ---
+                # Check if the user hit "Stop" during this file's processing
+                if st.session_state.stop_ai:
+                    # If so, fill any remaining blank categories with "None"
+                    # as requested.
+                    current_data = st.session_state.current_file_data
+                    current_data['Category'] = current_data['Category'].replace("", "None")
+                    st.session_state.current_file_data = current_data
                 st.session_state.all_processed_data.append(st.session_state.current_file_data)
                 st.session_state.file_progress_index = current_file_index + 1
                 st.session_state.row_progress_index = 0
@@ -685,7 +696,7 @@ with tab1:
                 st.success("Files processed! Skipping AI categorization.")
                 columns_to_keep = ['date', 'description', 'amount']
                 preview_data = data[columns_to_keep].copy()
-                preview_data['Category'] = "" # Leave category blank as requested
+                preview_data['Category'] = "None" # Leave category blank as requested
                 
                 st.session_state.processed_data = preview_data
                 st.session_state.app_step = "4_display"
@@ -699,33 +710,46 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
-        # 1. READ (The "Security Guard" takes a snapshot)
-        # We *must* make a copy for our "before" snapshot
-        data_from_state = st.session_state.processed_data.copy()
+        # FIX: Convert ALL blanks/NaNs/Nones to the String "None"
+        data_for_editor = st.session_state.processed_data.copy()
+        data_for_editor['Category'] = data_for_editor['Category'].fillna("None").replace("", "None")
 
-        # 2. RENDER (Show the editor)
-        configured_editor = st.data_editor(
-            data_from_state, # Pass in the snapshot
-            num_rows="dynamic",
-            column_config={
-                "Category": st.column_config.SelectboxColumn(
-                    "Category",
-                    help="Select the transaction category",
-                    options=st.session_state.categories,
-                    required=True
-                )
-            },
-            key="final_editor" # Keep the key to anchor the widget
-        )
 
-        # 3. WRITE (Save the "after" snapshot to the Magic Whiteboard)
-        st.session_state.processed_data = configured_editor
+        # --- 2. THE "NONE" FIX (Part B) ---
+        # Add String "None" to options (ensure no duplicates if it's in sidebar)
+        if "None" not in st.session_state.categories:
+             editor_options = ["None"] + st.session_state.categories
+        else:
+             editor_options = st.session_state.categories
 
-        # 4. COMPARE & REFRESH (The "Security Guard" part)
-        # Use pandas .equals() to see if *any* data changed.
-        if not data_from_state.equals(configured_editor):
-            # If the data is different (an edit was made)...
-            # ...force a refresh, just like the user suggested!
+
+        # --- 3. THE "SAVE BUTTON" (st.form) FIX ---
+        # This part is correct and fixes the "scroll-jump".
+
+        with st.form(key="editor_form"):
+            configured_editor = st.data_editor(
+                data_for_editor,
+                num_rows="dynamic",
+                column_config={
+                    "Category": st.column_config.SelectboxColumn(
+                        "Category",
+                        help="Select the transaction category",
+                        options=editor_options # <-- Use the new list with None
+                        # We have removed format_func, so "None" will be visible
+                    )
+                }
+            )
+
+            # This is our "Save" button
+            submitted = st.form_submit_button("Save Changes")
+
+        # --- 4. THE "SAVE" LOGIC ---
+        if submitted:
+            # On save, the data (which now contains `None`)
+            # is saved directly to the state.
+            # We no longer need to convert it back to "".
+            st.session_state.processed_data = configured_editor
+            st.success("Changes saved!")
             st.rerun()
 
 
@@ -804,6 +828,11 @@ with tab2:
             st.success(f"Dashboard loaded from `{uploaded_file.name}`!")
             # Load *only* the 'Expenses' sheet for our dashboard data
             all_data = pd.read_excel(uploaded_file, sheet_name="Expenses", engine='openpyxl')
+            
+            # FIX: The Dashboard crashes if categories are NaN/Blank.
+            # We force ALL categories to be strings. If they are NaN, they become "None".
+            all_data['Category'] = all_data['Category'].fillna("None").astype(str)
+            all_data['Category'] = all_data['Category'].replace("", "None")
             
             # Ensure 'amount' is numeric, just in case
             all_data['amount'] = pd.to_numeric(all_data['amount'], errors='coerce')
