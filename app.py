@@ -475,6 +475,9 @@ if 'current_file_data' not in st.session_state:
 if 'uploaded_master_file' not in st.session_state:
     st.session_state.uploaded_master_file = None
 
+if 'uploader_key' not in st.session_state:
+    st.session_state.uploader_key = 0
+
 
 
 
@@ -528,7 +531,7 @@ tab1, tab2 = st.tabs(["🗃️ Data Processing", "📊 Dashboard"])
 
 with tab1:
     st.write("Welcome to my app! Let's get those finances organized.")
-    uploaded_files = st.file_uploader("Upload your PDF bank statements here:", accept_multiple_files=True, type="pdf", key="pdf_uploader")
+    uploaded_files = st.file_uploader("Upload your PDF bank statements here:", accept_multiple_files=True, type="pdf", key=f"pdf_uploader_{st.session_state.uploader_key}")
 
 
 
@@ -806,8 +809,7 @@ with tab1:
             st.session_state.file_progress_index = 0
             st.session_state.row_progress_index = 0
             st.session_state.current_file_data = None
-            # This is now safe because it runs inside the callback
-            st.session_state["pdf_uploader"] = None # Use None to trigger the reset
+            st.session_state.uploader_key += 1
 
         # --- Button with Callback ---
         st.button("Process New Files", on_click=reset_app_state)
