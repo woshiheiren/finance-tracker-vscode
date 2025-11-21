@@ -257,7 +257,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
     # Clean up categories before merging
-    new_data_df['Category'] = new_data_df['Category'].fillna(None)
+    # Use .where() to replace NaNs with None (fillna(None) crashes)
+    new_data_df['Category'] = new_data_df['Category'].astype(object).where(new_data_df['Category'].notnull(), None)
     new_data_df['Category'] = new_data_df['Category'].replace('', None)
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
