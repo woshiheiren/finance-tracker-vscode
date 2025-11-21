@@ -193,7 +193,7 @@ def get_ai_category(description, categories_list):
         # Clean the AI's response (remove extra spaces/newlines)
         ai_guess = response.text.strip()
         
-        # Final check: if the AI's guess isn't in our list, default to "Other"
+        # Final check: if the AI's guess isn't in our list, default to None
         if ai_guess in categories_list:
             return ai_guess
         else:
@@ -257,8 +257,8 @@ def convert_df_to_excel(new_data_df, existing_file_buffer=None):
 
     # --- VIBE 2: COMBINE & SORT EXPENSES ---
     # Clean up categories before merging
-    new_data_df['Category'] = new_data_df['Category'].fillna('Other')
-    new_data_df['Category'] = new_data_df['Category'].replace('', 'Other')
+    new_data_df['Category'] = new_data_df['Category'].fillna(None)
+    new_data_df['Category'] = new_data_df['Category'].replace('', None)
     df_expenses_master = pd.concat([df_expenses_master, new_data_df], ignore_index=True)
     df_expenses_master['date'] = pd.to_datetime(df_expenses_master['date'])
     df_expenses_master.sort_values(by='date', ascending=True, inplace=True)
@@ -638,6 +638,13 @@ with tab1:
                     st.session_state.row_progress_index = preview_data.index.get_loc(index) + 1
 
                 # --- 3. After the *inner* loop (file is done or stopped) ---
+                # Check if the user hit "Stop" during this file's processing
+                if st.session_state.stop_ai:
+                    # If so, fill any remaining blank categories with "None"
+                    # as requested.
+                    current_data = st.session_state.current_file_data
+                    current_data['Category'] = current_data['Category'].replace("", None)
+                    st.session_state.current_file_data = current_data
                 st.session_state.all_processed_data.append(st.session_state.current_file_data)
                 st.session_state.file_progress_index = current_file_index + 1
                 st.session_state.row_progress_index = 0
@@ -685,7 +692,7 @@ with tab1:
                 st.success("Files processed! Skipping AI categorization.")
                 columns_to_keep = ['date', 'description', 'amount']
                 preview_data = data[columns_to_keep].copy()
-                preview_data['Category'] = "" # Leave category blank as requested
+                preview_data['Category'] = None # Leave category blank as requested
                 
                 st.session_state.processed_data = preview_data
                 st.session_state.app_step = "4_display"
@@ -699,17 +706,21 @@ with tab1:
     if st.session_state.app_step == "4_display" and st.session_state.processed_data is not None:
         st.subheader("Preview, Edit, and Finalize Your Transactions:")
 
-        # --- 1. THE "BLANK STRING" FIX ---
-        # (This fixes the "Other" auto-fill bug)
-        editor_options = [""] + st.session_state.categories
+        # --- 1. THE "NONE" FIX (Part A) ---
+        # We convert all blank strings ("") to None.
+        # This is the robust "blank" value.
         data_for_editor = st.session_state.processed_data.copy()
-        data_for_editor['Category'] = data_for_editor['Category'].fillna("")
+        data_for_editor['Category'] = data_for_editor['Category'].replace("", None)
 
 
-        # --- 2. THE "SAVE BUTTON" (st.form) FIX ---
-        # (This fixes the "scroll-jump" and "auto-fill" bugs)
-        # We wrap the editor in a form, so it only reruns
-        # when the "Save" button is clicked.
+        # --- 2. THE "NONE" FIX (Part B) ---
+        # We create a new list for the editor that includes `None`.
+        # This makes "blank" a legal, selectable option.
+        editor_options = [None] + st.session_state.categories
+
+
+        # --- 3. THE "SAVE BUTTON" (st.form) FIX ---
+        # This part is correct and fixes the "scroll-jump".
 
         with st.form(key="editor_form"):
             configured_editor = st.data_editor(
@@ -719,20 +730,22 @@ with tab1:
                     "Category": st.column_config.SelectboxColumn(
                         "Category",
                         help="Select the transaction category",
-                        options=editor_options # <-- Use the new list
+                        options=editor_options # <-- Use the new list with None
+                        # We have removed format_func, so "None" will be visible
                     )
                 }
-                # We do NOT need a key="final_editor" here
             )
 
-            # This is our new "Save" button
+            # This is our "Save" button
             submitted = st.form_submit_button("Save Changes")
 
-        # --- 3. THE NEW "SAVE" LOGIC ---
-        # We only save to session state *if* the button was clicked.
+        # --- 4. THE "SAVE" LOGIC ---
         if submitted:
+            # On save, the data (which now contains `None`)
+            # is saved directly to the state.
+            # We no longer need to convert it back to "".
             st.session_state.processed_data = configured_editor
-            st.success("Changes saved!") # Give the user some feedback
+            st.success("Changes saved!")
             st.rerun()
 
 
